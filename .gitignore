@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Kotlin
+.kotlin/
+
+# Local environment
+local.properties
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
