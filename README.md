@@ -52,6 +52,23 @@ Use Caddy with `Caddyfile.example` as the public HTTPS reverse proxy.
 - `OPS_GITHUB_WEBHOOK_SECRET`: GitHub webhook secret.
 - `OPS_DEPLOY_COMMAND`: command to run after a verified GitHub webhook.
 
+## Alerts
+
+Configure Discord with a channel webhook URL:
+
+```bash
+export OPS_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+```
+
+Configure Telegram with a bot token and chat id:
+
+```bash
+export OPS_TELEGRAM_BOT_TOKEN="..."
+export OPS_TELEGRAM_CHAT_ID="..."
+```
+
+Alerts are sent for action-required events such as service failures, resource threshold breaches, backup failures, deploy failures, RSS fetch failures, and page-watch changes. When a later success resolves an open incident, the hub sends one recovery alert. Plain INFO log records do not trigger incident alerts. Alert delivery failures are logged and do not block event creation or dashboard APIs.
+
 ## API
 
 - `GET /api/health`

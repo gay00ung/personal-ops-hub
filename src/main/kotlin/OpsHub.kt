@@ -129,14 +129,14 @@ class OpsHub(val config: AppConfig) {
 
         when (result.status) {
             HealthStatus.DOWN -> {
-                database.insertEvent(EventSeverity.CRITICAL, key, "${result.name} is down", result.message)
-                notifier.send("Service down", "${result.name}: ${result.message}")
+                val event = database.insertEvent(EventSeverity.CRITICAL, key, "${result.name} is down", result.message)
+                notifier.sendEvent("Service down", event)
             }
             HealthStatus.UP -> {
                 if (previous == HealthStatus.DOWN) {
-                    database.resolveOpenEvents(key)
+                    val resolvedCount = database.resolveOpenEvents(key)
                     database.insertEvent(EventSeverity.INFO, key, "${result.name} recovered", result.message)
-                    notifier.send("Service recovered", "${result.name}: ${result.message}")
+                    notifier.sendRecovery("Service recovered", key, resolvedCount, "${result.name}: ${result.message}")
                 }
             }
             HealthStatus.DEGRADED,
@@ -166,14 +166,14 @@ class OpsHub(val config: AppConfig) {
         if (status == HealthStatus.DOWN) {
             val message = "$label is at $value% (threshold $threshold%)"
             val source = "metric:$key"
-            database.insertEvent(EventSeverity.CRITICAL, source, message)
-            notifier.send("Resource threshold exceeded", message)
+            val event = database.insertEvent(EventSeverity.CRITICAL, source, message)
+            notifier.sendEvent("Resource threshold exceeded", event)
         } else if (previous == HealthStatus.DOWN) {
             val message = "$label recovered to $value%"
             val source = "metric:$key"
-            database.resolveOpenEvents(source)
+            val resolvedCount = database.resolveOpenEvents(source)
             database.insertEvent(EventSeverity.INFO, source, message)
-            notifier.send("Resource recovered", message)
+            notifier.sendRecovery("Resource recovered", source, resolvedCount, message)
         }
     }
 

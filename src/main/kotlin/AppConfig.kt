@@ -92,9 +92,9 @@ fun loadAppConfig(env: Map<String, String> = System.getenv()): AppConfig {
             apiToken = env["OPS_ADMIN_TOKEN"]?.takeIf { it.isNotBlank() },
         ),
         alerts = AlertConfig(
-            discordWebhookUrl = env["OPS_DISCORD_WEBHOOK_URL"]?.takeIf { it.isNotBlank() },
-            telegramBotToken = env["OPS_TELEGRAM_BOT_TOKEN"]?.takeIf { it.isNotBlank() },
-            telegramChatId = env["OPS_TELEGRAM_CHAT_ID"]?.takeIf { it.isNotBlank() },
+            discordWebhookUrl = setting(env, "OPS_DISCORD_WEBHOOK_URL")?.takeIf { it.isNotBlank() },
+            telegramBotToken = setting(env, "OPS_TELEGRAM_BOT_TOKEN")?.takeIf { it.isNotBlank() },
+            telegramChatId = setting(env, "OPS_TELEGRAM_CHAT_ID")?.takeIf { it.isNotBlank() },
             diskCriticalPercent = env["OPS_DISK_CRITICAL_PERCENT"]?.toDoubleOrNull() ?: 80.0,
             memoryCriticalPercent = env["OPS_MEMORY_CRITICAL_PERCENT"]?.toDoubleOrNull() ?: 90.0,
             cpuCriticalPercent = env["OPS_CPU_CRITICAL_PERCENT"]?.toDoubleOrNull() ?: 95.0,

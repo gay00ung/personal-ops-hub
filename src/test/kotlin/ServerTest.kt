@@ -1,5 +1,6 @@
 package net.lateinint
 
+import com.sun.net.httpserver.HttpServer
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -8,8 +9,10 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import java.net.InetSocketAddress
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Collections
 import java.util.Comparator
 import kotlin.test.*
 
@@ -19,6 +22,9 @@ class ServerTest {
     @BeforeTest
     fun disableBackgroundJobs() {
         System.setProperty("OPS_DISABLE_BACKGROUND", "true")
+        System.clearProperty("OPS_DISCORD_WEBHOOK_URL")
+        System.clearProperty("OPS_TELEGRAM_BOT_TOKEN")
+        System.clearProperty("OPS_TELEGRAM_CHAT_ID")
         tempDir = Files.createTempDirectory("ops-hub-test")
         System.setProperty("OPS_DB_PATH", tempDir!!.resolve("ops-hub.db").toString())
     }
@@ -27,6 +33,9 @@ class ServerTest {
     fun restoreBackgroundJobs() {
         System.clearProperty("OPS_DISABLE_BACKGROUND")
         System.clearProperty("OPS_DB_PATH")
+        System.clearProperty("OPS_DISCORD_WEBHOOK_URL")
+        System.clearProperty("OPS_TELEGRAM_BOT_TOKEN")
+        System.clearProperty("OPS_TELEGRAM_CHAT_ID")
         tempDir?.let { dir ->
             Files.walk(dir).use { paths ->
                 paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
@@ -140,6 +149,69 @@ class ServerTest {
     }
 
     @Test
+    fun `discord webhook receives backup failure and recovery alerts`() {
+        TestWebhookServer().use { webhook ->
+            System.setProperty("OPS_DISCORD_WEBHOOK_URL", webhook.url)
+
+            testApplication {
+                configure()
+
+                client.post("/api/backups/report") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"name":"nightly","success":false,"message":"Nightly backup failed"}""")
+                }
+                client.post("/api/backups/report") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"name":"nightly","success":true,"message":"Nightly backup succeeded"}""")
+                }
+            }
+
+            val bodies = webhook.bodies()
+            assertEquals(2, bodies.size)
+            assertContains(bodies[0], "Backup failed")
+            assertContains(bodies[0], "Nightly backup failed")
+            assertContains(bodies[1], "Backup recovered")
+            assertContains(bodies[1], "resolved 1 open event")
+        }
+    }
+
+    @Test
+    fun `successful backup without open incident does not send alert`() {
+        TestWebhookServer().use { webhook ->
+            System.setProperty("OPS_DISCORD_WEBHOOK_URL", webhook.url)
+
+            testApplication {
+                configure()
+
+                val response = client.post("/api/backups/report") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"name":"nightly","success":true,"message":"Nightly backup succeeded"}""")
+                }
+
+                assertEquals(HttpStatusCode.OK, response.status)
+                assertContains(response.bodyAsText(), """"actionRequired":false""")
+            }
+
+            assertEquals(emptyList(), webhook.bodies())
+        }
+    }
+
+    @Test
+    fun `alert delivery failure does not break event creation`() = testApplication {
+        System.setProperty("OPS_DISCORD_WEBHOOK_URL", "not a uri")
+        configure()
+
+        val response = client.post("/api/backups/report") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"name":"app","success":false,"message":"Backup failed while webhook is broken"}""")
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertContains(response.bodyAsText(), "Backup failed while webhook is broken")
+        assertContains(response.bodyAsText(), """"actionRequired":true""")
+    }
+
+    @Test
     fun `github webhook is unavailable until configured`() = testApplication {
         configure()
 
@@ -149,4 +221,27 @@ class ServerTest {
         assertContains(response.bodyAsText(), "OPS_GITHUB_WEBHOOK_SECRET")
     }
 
+    private class TestWebhookServer : AutoCloseable {
+        private val messages = Collections.synchronizedList(mutableListOf<String>())
+        private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+
+        val url: String
+            get() = "http://127.0.0.1:${server.address.port}/webhook"
+
+        init {
+            server.createContext("/webhook") { exchange ->
+                val body = exchange.requestBody.bufferedReader().use { it.readText() }
+                messages += body
+                exchange.sendResponseHeaders(204, -1)
+                exchange.close()
+            }
+            server.start()
+        }
+
+        fun bodies(): List<String> = synchronized(messages) { messages.toList() }
+
+        override fun close() {
+            server.stop(0)
+        }
+    }
 }

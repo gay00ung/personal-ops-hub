@@ -50,9 +50,13 @@ class AutomationRunner(
         val message = request.message?.takeIf { it.isNotBlank() }
             ?: if (request.success) "backup succeeded" else "backup failed"
         val source = "backup:${request.name}"
-        if (request.success) database.resolveOpenEvents(source)
+        val resolvedCount = if (request.success) database.resolveOpenEvents(source) else 0
         val event = database.insertEvent(severity, source, message)
-        if (!request.success) notifier.send("Backup failed", "${request.name}: $message")
+        if (request.success) {
+            notifier.sendRecovery("Backup recovered", source, resolvedCount, "${request.name}: $message")
+        } else {
+            notifier.sendEvent("Backup failed", event)
+        }
         return event
     }
 
@@ -63,7 +67,8 @@ class AutomationRunner(
             ?: return CommandResult(false, null, "OPS_DEPLOY_COMMAND is not configured")
 
         if (!verifyGithubSignature(payload, signature, secret)) {
-            database.insertEvent(EventSeverity.WARNING, "deploy", "GitHub webhook rejected: invalid signature")
+            val event = database.insertEvent(EventSeverity.WARNING, "deploy", "GitHub webhook rejected: invalid signature")
+            notifier.sendEvent("GitHub webhook rejected", event)
             return CommandResult(false, null, "invalid signature")
         }
 
@@ -74,9 +79,13 @@ class AutomationRunner(
             timeoutSeconds = 180,
         )
         val severity = if (result.success) EventSeverity.INFO else EventSeverity.CRITICAL
-        if (result.success) database.resolveOpenEvents("deploy")
-        database.insertEvent(severity, "deploy", if (result.success) "deploy command succeeded" else "deploy command failed", result.output)
-        if (!result.success) notifier.send("Deploy failed", result.output.ifBlank { "deploy command failed" })
+        val resolvedCount = if (result.success) database.resolveOpenEvents("deploy") else 0
+        val event = database.insertEvent(severity, "deploy", if (result.success) "deploy command succeeded" else "deploy command failed", result.output)
+        if (result.success) {
+            notifier.sendRecovery("Deploy recovered", "deploy", resolvedCount, "deploy command succeeded")
+        } else {
+            notifier.sendEvent("Deploy failed", event)
+        }
         return result
     }
 
@@ -109,10 +118,12 @@ class AutomationRunner(
         for (feed in config.automations.rssFeeds) {
             val source = "rss:${feed.name}"
             val document = fetchXml(feed.url).getOrElse { error ->
-                database.insertEvent(EventSeverity.WARNING, source, error.message ?: "RSS fetch failed")
+                val event = database.insertEvent(EventSeverity.WARNING, source, error.message ?: "RSS fetch failed")
+                notifier.sendEvent("RSS fetch failed: ${feed.name}", event)
                 continue
             }
-            database.resolveOpenEvents(source)
+            val resolvedCount = database.resolveOpenEvents(source)
+            notifier.sendRecovery("RSS fetch recovered: ${feed.name}", source, resolvedCount, "feed fetch succeeded")
             val items = extractFeedItems(document)
             val initializedKey = "rss:${feed.name}:initialized"
             val initialized = database.getState(initializedKey) == "true"
@@ -134,20 +145,22 @@ class AutomationRunner(
 
     private suspend fun pollPageWatches() {
         for (watch in config.automations.pageWatches) {
-            val source = "page:${watch.name}"
+            val fetchSource = "page-fetch:${watch.name}"
             val body = fetchText(watch.url).getOrElse { error ->
-                database.insertEvent(EventSeverity.WARNING, source, error.message ?: "page fetch failed")
+                val event = database.insertEvent(EventSeverity.WARNING, fetchSource, error.message ?: "page fetch failed")
+                notifier.sendEvent("Page fetch failed: ${watch.name}", event)
                 continue
             }
-            database.resolveOpenEvents(source)
+            val resolvedCount = database.resolveOpenEvents(fetchSource) + database.resolveOpenEvents("page:${watch.name}")
+            notifier.sendRecovery("Page fetch recovered: ${watch.name}", fetchSource, resolvedCount, "page fetch succeeded")
             val hash = sha256(body)
             val key = "page-watch:${watch.name}:hash"
             val previous = database.getState(key)
             database.setState(key, hash)
             if (previous != null && previous != hash) {
                 val message = "content changed: ${watch.url}"
-                database.insertEvent(EventSeverity.WARNING, source, message)
-                notifier.send("Page changed: ${watch.name}", message)
+                val event = database.insertEvent(EventSeverity.WARNING, "page-change:${watch.name}", message)
+                notifier.sendEvent("Page changed: ${watch.name}", event)
             }
         }
     }
