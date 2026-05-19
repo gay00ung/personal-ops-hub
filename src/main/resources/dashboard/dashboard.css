@@ -630,6 +630,11 @@ td:last-child {
     color: #166534;
 }
 
+.event-state.log {
+    background: #e5e7eb;
+    color: #4b5563;
+}
+
 .event-detail {
     border-left: 1px solid var(--border);
     padding-left: 18px;

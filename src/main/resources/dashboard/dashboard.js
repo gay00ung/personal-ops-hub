@@ -54,6 +54,7 @@ const translations = {
         eventStateOPEN: "Open",
         eventStateACKNOWLEDGED: "Acknowledged",
         eventStateRESOLVED: "Resolved",
+        eventActionLog: "Log",
         selectEventPrompt: "Select an event to inspect it.",
         eventDetails: "Event Details",
         eventMessage: "Message",
@@ -64,6 +65,7 @@ const translations = {
         markOpen: "Reopen",
         markAcknowledged: "Acknowledge",
         markResolved: "Resolve",
+        noOpenEvents: "No open action items",
         noEventsYet: "No events yet",
         websocket: "WebSocket",
         socketConnecting: "Connecting",
@@ -137,6 +139,7 @@ const translations = {
         eventStateOPEN: "열림",
         eventStateACKNOWLEDGED: "확인함",
         eventStateRESOLVED: "해결됨",
+        eventActionLog: "기록",
         selectEventPrompt: "이벤트를 선택하면 상세 내용을 볼 수 있습니다.",
         eventDetails: "이벤트 상세",
         eventMessage: "메시지",
@@ -147,6 +150,7 @@ const translations = {
         markOpen: "다시 열기",
         markAcknowledged: "확인 처리",
         markResolved: "해결 처리",
+        noOpenEvents: "열린 조치 항목이 없습니다",
         noEventsYet: "아직 이벤트 없음",
         websocket: "웹소켓",
         socketConnecting: "연결 중",
@@ -182,7 +186,7 @@ const state = {
     eventSearchTimer: null,
     eventFilters: {
         severity: "ALL",
-        state: "ALL",
+        state: "OPEN",
         query: "",
     },
 };
@@ -355,8 +359,14 @@ function severityLabel(severity) {
     return t(`severity${String(severity || "INFO").toUpperCase()}`);
 }
 
-function eventStateLabel(eventState) {
-    return t(`eventState${String(eventState || "OPEN").toUpperCase()}`);
+function eventStateLabel(event) {
+    if (event && event.actionRequired === false) return t("eventActionLog");
+    return t(`eventState${String(event?.state || "OPEN").toUpperCase()}`);
+}
+
+function eventStateClass(event) {
+    if (event && event.actionRequired === false) return "log";
+    return String(event?.state || "OPEN").toLowerCase();
 }
 
 function kindLabel(kind) {
@@ -444,7 +454,7 @@ function renderEvents(events) {
     }
 
     if (state.events.length === 0) {
-        els.eventsList.innerHTML = `<li class="empty">${escapeHtml(t("noEventsYet"))}</li>`;
+        els.eventsList.innerHTML = `<li class="empty">${escapeHtml(emptyEventsText())}</li>`;
         renderEventDetail();
         return;
     }
@@ -454,7 +464,7 @@ function renderEvents(events) {
             <button type="button" class="event-row ${event.id === state.selectedEventId ? "active" : ""}" data-event-id="${event.id}" aria-pressed="${event.id === state.selectedEventId}">
                 <span class="event-time">${formatTime(event.timestamp)}</span>
                 <span class="status-pill ${String(event.severity).toLowerCase()}">${escapeHtml(severityLabel(event.severity))}</span>
-                <span class="event-state ${String(event.state || "OPEN").toLowerCase()}">${escapeHtml(eventStateLabel(event.state))}</span>
+                <span class="event-state ${eventStateClass(event)}">${escapeHtml(eventStateLabel(event))}</span>
                 <span class="event-message">
                     <strong>${escapeHtml(localizeEventMessage(event.message))}</strong>
                     <small>${escapeHtml(localizeSource(event.source))}${event.details ? ` · ${escapeHtml(localizeServiceMessage(event.details))}` : ""}</small>
@@ -472,7 +482,7 @@ function renderEventDetail() {
         return;
     }
 
-    const actions = [
+    const actions = event.actionRequired === false ? [] : [
         ["OPEN", "markOpen", "secondary"],
         ["ACKNOWLEDGED", "markAcknowledged", "secondary"],
         ["RESOLVED", "markResolved", "primary"],
@@ -487,7 +497,7 @@ function renderEventDetail() {
             </div>
             <div>
                 <dt>${escapeHtml(t("eventStatus"))}</dt>
-                <dd><span class="event-state ${String(event.state || "OPEN").toLowerCase()}">${escapeHtml(eventStateLabel(event.state))}</span></dd>
+                <dd><span class="event-state ${eventStateClass(event)}">${escapeHtml(eventStateLabel(event))}</span></dd>
             </div>
             <div>
                 <dt>${escapeHtml(t("eventTimestamp"))}</dt>
@@ -665,6 +675,11 @@ function hasActiveEventFilters() {
         state.eventFilters.query.trim() !== "";
 }
 
+function emptyEventsText() {
+    if (state.eventFilters.state === "OPEN" && !state.eventFilters.query.trim()) return t("noOpenEvents");
+    return t("noEventsYet");
+}
+
 function buildEventsUrl() {
     const params = new URLSearchParams({ limit: "100" });
     if (state.eventFilters.severity !== "ALL") params.set("severity", state.eventFilters.severity);
@@ -676,6 +691,7 @@ function buildEventsUrl() {
 function eventMatchesFilters(event) {
     const query = state.eventFilters.query.trim().toLowerCase();
     if (state.eventFilters.severity !== "ALL" && event.severity !== state.eventFilters.severity) return false;
+    if (state.eventFilters.state !== "ALL" && event.actionRequired === false) return false;
     if (state.eventFilters.state !== "ALL" && event.state !== state.eventFilters.state) return false;
     if (!query) return true;
     return [event.message, event.source, event.details]

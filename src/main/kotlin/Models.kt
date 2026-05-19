@@ -105,6 +105,7 @@ data class EventRecord(
     val message: String,
     val details: String? = null,
     val state: EventState = EventState.OPEN,
+    val actionRequired: Boolean = severity != EventSeverity.INFO,
 )
 
 @Serializable

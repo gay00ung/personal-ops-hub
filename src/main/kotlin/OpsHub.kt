@@ -134,6 +134,7 @@ class OpsHub(val config: AppConfig) {
             }
             HealthStatus.UP -> {
                 if (previous == HealthStatus.DOWN) {
+                    database.resolveOpenEvents(key)
                     database.insertEvent(EventSeverity.INFO, key, "${result.name} recovered", result.message)
                     notifier.send("Service recovered", "${result.name}: ${result.message}")
                 }
@@ -164,11 +165,14 @@ class OpsHub(val config: AppConfig) {
 
         if (status == HealthStatus.DOWN) {
             val message = "$label is at $value% (threshold $threshold%)"
-            database.insertEvent(EventSeverity.CRITICAL, "metric:$key", message)
+            val source = "metric:$key"
+            database.insertEvent(EventSeverity.CRITICAL, source, message)
             notifier.send("Resource threshold exceeded", message)
         } else if (previous == HealthStatus.DOWN) {
             val message = "$label recovered to $value%"
-            database.insertEvent(EventSeverity.INFO, "metric:$key", message)
+            val source = "metric:$key"
+            database.resolveOpenEvents(source)
+            database.insertEvent(EventSeverity.INFO, source, message)
             notifier.send("Resource recovered", message)
         }
     }

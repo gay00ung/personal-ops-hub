@@ -49,7 +49,9 @@ class AutomationRunner(
         val severity = if (request.success) EventSeverity.INFO else EventSeverity.CRITICAL
         val message = request.message?.takeIf { it.isNotBlank() }
             ?: if (request.success) "backup succeeded" else "backup failed"
-        val event = database.insertEvent(severity, "backup:${request.name}", message)
+        val source = "backup:${request.name}"
+        if (request.success) database.resolveOpenEvents(source)
+        val event = database.insertEvent(severity, source, message)
         if (!request.success) notifier.send("Backup failed", "${request.name}: $message")
         return event
     }
@@ -72,6 +74,7 @@ class AutomationRunner(
             timeoutSeconds = 180,
         )
         val severity = if (result.success) EventSeverity.INFO else EventSeverity.CRITICAL
+        if (result.success) database.resolveOpenEvents("deploy")
         database.insertEvent(severity, "deploy", if (result.success) "deploy command succeeded" else "deploy command failed", result.output)
         if (!result.success) notifier.send("Deploy failed", result.output.ifBlank { "deploy command failed" })
         return result
@@ -104,10 +107,12 @@ class AutomationRunner(
 
     private suspend fun pollRssFeeds() {
         for (feed in config.automations.rssFeeds) {
+            val source = "rss:${feed.name}"
             val document = fetchXml(feed.url).getOrElse { error ->
-                database.insertEvent(EventSeverity.WARNING, "rss:${feed.name}", error.message ?: "RSS fetch failed")
+                database.insertEvent(EventSeverity.WARNING, source, error.message ?: "RSS fetch failed")
                 continue
             }
+            database.resolveOpenEvents(source)
             val items = extractFeedItems(document)
             val initializedKey = "rss:${feed.name}:initialized"
             val initialized = database.getState(initializedKey) == "true"
@@ -117,29 +122,31 @@ class AutomationRunner(
                 database.setState(stateKey, "seen")
                 if (!initialized) continue
                 val message = "${item.title} - ${item.link}"
-                database.insertEvent(EventSeverity.INFO, "rss:${feed.name}", message)
+                database.insertEvent(EventSeverity.INFO, source, message)
                 notifier.send("RSS update: ${feed.name}", message)
             }
             if (!initialized) {
                 database.setState(initializedKey, "true")
-                database.insertEvent(EventSeverity.INFO, "rss:${feed.name}", "feed initialized with ${items.size} items")
+                database.insertEvent(EventSeverity.INFO, source, "feed initialized with ${items.size} items")
             }
         }
     }
 
     private suspend fun pollPageWatches() {
         for (watch in config.automations.pageWatches) {
+            val source = "page:${watch.name}"
             val body = fetchText(watch.url).getOrElse { error ->
-                database.insertEvent(EventSeverity.WARNING, "page:${watch.name}", error.message ?: "page fetch failed")
+                database.insertEvent(EventSeverity.WARNING, source, error.message ?: "page fetch failed")
                 continue
             }
+            database.resolveOpenEvents(source)
             val hash = sha256(body)
             val key = "page-watch:${watch.name}:hash"
             val previous = database.getState(key)
             database.setState(key, hash)
             if (previous != null && previous != hash) {
                 val message = "content changed: ${watch.url}"
-                database.insertEvent(EventSeverity.WARNING, "page:${watch.name}", message)
+                database.insertEvent(EventSeverity.WARNING, source, message)
                 notifier.send("Page changed: ${watch.name}", message)
             }
         }

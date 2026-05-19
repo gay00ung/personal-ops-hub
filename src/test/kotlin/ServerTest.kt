@@ -82,9 +82,9 @@ class ServerTest {
     fun `events can be filtered and acknowledged`() = testApplication {
         configure()
 
-        val created = client.post("/api/alerts/test") {
+        val created = client.post("/api/backups/report") {
             contentType(ContentType.Application.Json)
-            setBody("""{"message":"Backup failed on app server"}""")
+            setBody("""{"name":"app","success":false,"message":"Backup failed on app server"}""")
         }
         val id = Regex(""""id":(\d+)""").find(created.bodyAsText())!!.groupValues[1]
 
@@ -97,7 +97,45 @@ class ServerTest {
 
         assertEquals(HttpStatusCode.OK, updated.status)
         assertContains(updated.bodyAsText(), """"state":"ACKNOWLEDGED"""")
+        assertContains(updated.bodyAsText(), """"actionRequired":true""")
         assertContains(filtered.bodyAsText(), "Backup failed on app server")
+        assertEquals("[]", open.bodyAsText())
+    }
+
+    @Test
+    fun `info events are log records instead of open action items`() = testApplication {
+        configure()
+
+        val created = client.post("/api/alerts/test") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"message":"Manual note"}""")
+        }
+        val open = client.get("/api/events?state=OPEN&q=manual")
+
+        assertEquals(HttpStatusCode.OK, created.status)
+        assertContains(created.bodyAsText(), """"state":"RESOLVED"""")
+        assertContains(created.bodyAsText(), """"actionRequired":false""")
+        assertEquals("[]", open.bodyAsText())
+    }
+
+    @Test
+    fun `successful backup report resolves previous failure automatically`() = testApplication {
+        configure()
+
+        client.post("/api/backups/report") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"name":"nightly","success":false,"message":"Nightly backup failed"}""")
+        }
+        client.post("/api/backups/report") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"name":"nightly","success":true,"message":"Nightly backup succeeded"}""")
+        }
+
+        val resolved = client.get("/api/events?state=RESOLVED&q=Nightly%20backup%20failed")
+        val open = client.get("/api/events?state=OPEN&q=Nightly%20backup%20failed")
+
+        assertContains(resolved.bodyAsText(), "Nightly backup failed")
+        assertContains(resolved.bodyAsText(), """"state":"RESOLVED"""")
         assertEquals("[]", open.bodyAsText())
     }
 

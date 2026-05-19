@@ -103,22 +103,28 @@ class OpsDatabase(private val path: Path) {
         message: String,
         details: String? = null,
         timestamp: Long = System.currentTimeMillis(),
+        actionRequired: Boolean = severity != EventSeverity.INFO,
     ): EventRecord =
         connection().use { conn ->
             conn.prepareStatement(
-                "insert into events(timestamp, severity, source, message, details, state) values(?, ?, ?, ?, ?, ?)",
+                """
+                insert into events(timestamp, severity, source, message, details, state, action_required)
+                values(?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent(),
                 Statement.RETURN_GENERATED_KEYS,
             ).use { stmt ->
+                val initialState = if (actionRequired) EventState.OPEN else EventState.RESOLVED
                 stmt.setLong(1, timestamp)
                 stmt.setString(2, severity.name)
                 stmt.setString(3, source)
                 stmt.setString(4, message)
                 stmt.setString(5, details)
-                stmt.setString(6, EventState.OPEN.name)
+                stmt.setString(6, initialState.name)
+                stmt.setInt(7, if (actionRequired) 1 else 0)
                 stmt.executeUpdate()
                 stmt.generatedKeys.use { keys ->
                     val id = if (keys.next()) keys.getLong(1) else 0L
-                    EventRecord(id, timestamp, severity, source, message, details, EventState.OPEN)
+                    EventRecord(id, timestamp, severity, source, message, details, initialState, actionRequired)
                 }
             }
         }
@@ -141,6 +147,7 @@ class OpsDatabase(private val path: Path) {
             state?.let {
                 conditions += "state = ?"
                 args += it.name
+                conditions += "action_required = 1"
             }
             query?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let {
                 conditions += "(lower(source) like ? or lower(message) like ? or lower(coalesce(details, '')) like ?)"
@@ -150,7 +157,7 @@ class OpsDatabase(private val path: Path) {
             val where = if (conditions.isEmpty()) "" else "where ${conditions.joinToString(" and ")}"
             conn.prepareStatement(
                 """
-                select id, timestamp, severity, source, message, details, state
+                select id, timestamp, severity, source, message, details, state, action_required
                 from events
                 $where
                 order by timestamp desc
@@ -172,7 +179,10 @@ class OpsDatabase(private val path: Path) {
     @Synchronized
     fun updateEventState(id: Long, state: EventState): EventRecord? =
         connection().use { conn ->
-            val updated = conn.prepareStatement("update events set state = ? where id = ?").use { stmt ->
+            val existing = eventById(conn, id) ?: return@use null
+            if (!existing.actionRequired) return@use existing
+
+            val updated = conn.prepareStatement("update events set state = ? where id = ? and action_required = 1").use { stmt ->
                 stmt.setString(1, state.name)
                 stmt.setLong(2, id)
                 stmt.executeUpdate()
@@ -180,10 +190,30 @@ class OpsDatabase(private val path: Path) {
             if (updated == 0) null else eventById(conn, id)
         }
 
+    @Synchronized
+    fun resolveOpenEvents(source: String): Int =
+        connection().use { conn ->
+            conn.prepareStatement(
+                """
+                update events
+                set state = ?
+                where source = ?
+                    and action_required = 1
+                    and state in (?, ?)
+                """.trimIndent(),
+            ).use { stmt ->
+                stmt.setString(1, EventState.RESOLVED.name)
+                stmt.setString(2, source)
+                stmt.setString(3, EventState.OPEN.name)
+                stmt.setString(4, EventState.ACKNOWLEDGED.name)
+                stmt.executeUpdate()
+            }
+        }
+
     private fun eventById(conn: Connection, id: Long): EventRecord? =
         conn.prepareStatement(
             """
-            select id, timestamp, severity, source, message, details, state
+            select id, timestamp, severity, source, message, details, state, action_required
             from events
             where id = ?
             """.trimIndent(),
@@ -255,14 +285,17 @@ class OpsDatabase(private val path: Path) {
                         source text not null,
                         message text not null,
                         details text,
-                        state text not null default 'OPEN'
+                        state text not null default 'OPEN',
+                        action_required integer not null default 1
                     )
                     """.trimIndent(),
                 )
                 ensureEventsStateColumn(conn)
+                ensureEventsActionRequiredColumn(conn)
                 stmt.executeUpdate("create index if not exists idx_events_timestamp on events(timestamp desc)")
                 stmt.executeUpdate("create index if not exists idx_events_state on events(state)")
                 stmt.executeUpdate("create index if not exists idx_events_severity on events(severity)")
+                stmt.executeUpdate("create index if not exists idx_events_action_required on events(action_required)")
                 stmt.executeUpdate(
                     """
                     create table if not exists automation_state(
@@ -293,6 +326,7 @@ class OpsDatabase(private val path: Path) {
             message = getString("message"),
             details = getString("details"),
             state = runCatching { EventState.valueOf(getString("state")) }.getOrDefault(EventState.OPEN),
+            actionRequired = getInt("action_required") == 1,
         )
 
     private fun ensureEventsStateColumn(conn: Connection) {
@@ -304,6 +338,21 @@ class OpsDatabase(private val path: Path) {
         if (!hasState) {
             conn.createStatement().use { stmt ->
                 stmt.executeUpdate("alter table events add column state text not null default 'OPEN'")
+            }
+        }
+    }
+
+    private fun ensureEventsActionRequiredColumn(conn: Connection) {
+        val hasActionRequired = conn.prepareStatement("pragma table_info(events)").use { stmt ->
+            stmt.executeQuery().use { rs ->
+                generateSequence { if (rs.next()) rs.getString("name") else null }.any { it == "action_required" }
+            }
+        }
+        if (!hasActionRequired) {
+            conn.createStatement().use { stmt ->
+                stmt.executeUpdate("alter table events add column action_required integer not null default 1")
+                stmt.executeUpdate("update events set action_required = case when severity in ('CRITICAL', 'WARNING') then 1 else 0 end")
+                stmt.executeUpdate("update events set state = 'RESOLVED' where action_required = 0")
             }
         }
     }
