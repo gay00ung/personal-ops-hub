@@ -70,7 +70,36 @@ fun Application.configureRouting() {
 
                 get("/events") {
                     val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 200) ?: 100
-                    call.respond(hub.database.recentEvents(limit))
+                    val severity = call.request.queryParameters["severity"]?.let { value ->
+                        parseEnumParam<EventSeverity>(value) ?: return@get call.respond(
+                            HttpStatusCode.BadRequest,
+                            ErrorResponse("bad_request", "invalid severity"),
+                        )
+                    }
+                    val state = call.request.queryParameters["state"]?.let { value ->
+                        parseEnumParam<EventState>(value) ?: return@get call.respond(
+                            HttpStatusCode.BadRequest,
+                            ErrorResponse("bad_request", "invalid event state"),
+                        )
+                    }
+                    val query = call.request.queryParameters["q"]
+                    call.respond(hub.database.recentEvents(limit, severity, state, query))
+                }
+
+                post("/events/{id}/state") {
+                    if (!call.requireAdminToken(hub)) return@post
+                    val id = call.parameters["id"]?.toLongOrNull()
+                        ?: return@post call.respond(
+                            HttpStatusCode.BadRequest,
+                            ErrorResponse("bad_request", "invalid event id"),
+                        )
+                    val request = call.receive<EventStateUpdateRequest>()
+                    val event = hub.database.updateEventState(id, request.state)
+                        ?: return@post call.respond(
+                            HttpStatusCode.NotFound,
+                            ErrorResponse("not_found", "event not found"),
+                        )
+                    call.respond(event)
                 }
 
                 get("/automation") {
@@ -128,3 +157,6 @@ fun Application.configureRouting() {
 }
 
 private val Int.minutesInMillis: Long get() = this * 60_000L
+
+private inline fun <reified T : Enum<T>> parseEnumParam(value: String): T? =
+    runCatching { enumValueOf<T>(value.uppercase()) }.getOrNull()

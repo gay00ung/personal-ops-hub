@@ -46,6 +46,24 @@ const translations = {
         none: "None",
         recentEvents: "Recent Events",
         recentEventsDesc: "Incidents, recoveries, reports, deploys, and backup results.",
+        eventSearchLabel: "Search",
+        eventSearchPlaceholder: "Search message, source, or details",
+        eventSeverityFilter: "Severity",
+        eventStateFilter: "State",
+        filterAll: "All",
+        eventStateOPEN: "Open",
+        eventStateACKNOWLEDGED: "Acknowledged",
+        eventStateRESOLVED: "Resolved",
+        selectEventPrompt: "Select an event to inspect it.",
+        eventDetails: "Event Details",
+        eventMessage: "Message",
+        eventSource: "Source",
+        eventTimestamp: "Time",
+        eventStatus: "State",
+        eventDetailsLabel: "Details",
+        markOpen: "Reopen",
+        markAcknowledged: "Acknowledge",
+        markResolved: "Resolve",
         noEventsYet: "No events yet",
         websocket: "WebSocket",
         socketConnecting: "Connecting",
@@ -111,6 +129,24 @@ const translations = {
         none: "없음",
         recentEvents: "최근 이벤트",
         recentEventsDesc: "장애, 복구, 리포트, 배포, 백업 결과입니다.",
+        eventSearchLabel: "검색",
+        eventSearchPlaceholder: "메시지, 출처, 상세 내용 검색",
+        eventSeverityFilter: "심각도",
+        eventStateFilter: "처리 상태",
+        filterAll: "전체",
+        eventStateOPEN: "열림",
+        eventStateACKNOWLEDGED: "확인함",
+        eventStateRESOLVED: "해결됨",
+        selectEventPrompt: "이벤트를 선택하면 상세 내용을 볼 수 있습니다.",
+        eventDetails: "이벤트 상세",
+        eventMessage: "메시지",
+        eventSource: "출처",
+        eventTimestamp: "시간",
+        eventStatus: "처리 상태",
+        eventDetailsLabel: "상세",
+        markOpen: "다시 열기",
+        markAcknowledged: "확인 처리",
+        markResolved: "해결 처리",
         noEventsYet: "아직 이벤트 없음",
         websocket: "웹소켓",
         socketConnecting: "연결 중",
@@ -141,6 +177,14 @@ const state = {
     latestSnapshot: null,
     latestSocketState: "websocket",
     navLockUntil: 0,
+    events: [],
+    selectedEventId: null,
+    eventSearchTimer: null,
+    eventFilters: {
+        severity: "ALL",
+        state: "ALL",
+        query: "",
+    },
 };
 
 const els = {
@@ -156,6 +200,10 @@ const els = {
     socketState: document.getElementById("socketState"),
     servicesBody: document.getElementById("servicesBody"),
     eventsList: document.getElementById("eventsList"),
+    eventDetail: document.getElementById("eventDetail"),
+    eventsSearchInput: document.getElementById("eventsSearchInput"),
+    eventSeverityButtons: document.querySelectorAll("[data-event-severity-filter]"),
+    eventStateButtons: document.querySelectorAll("[data-event-state-filter]"),
     historyChart: document.getElementById("historyChart"),
     dailyReport: document.getElementById("dailyReport"),
     deployState: document.getElementById("deployState"),
@@ -250,6 +298,9 @@ function applyLocale() {
     document.querySelectorAll("[data-i18n]").forEach((node) => {
         node.textContent = t(node.dataset.i18n);
     });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
+        node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
+    });
     els.languageToggle.setAttribute("aria-label", t("languageLabel"));
     els.localeButtons.forEach((button) => {
         const active = button.dataset.locale === state.locale;
@@ -259,6 +310,8 @@ function applyLocale() {
     setSocketState(state.latestSocketState);
     if (state.latestSummary) renderSummary(state.latestSummary, false);
     else if (state.latestSnapshot) renderSnapshot(state.latestSnapshot, false);
+    syncEventFilterButtons();
+    renderEventDetail();
     drawChart();
 }
 
@@ -302,6 +355,10 @@ function severityLabel(severity) {
     return t(`severity${String(severity || "INFO").toUpperCase()}`);
 }
 
+function eventStateLabel(eventState) {
+    return t(`eventState${String(eventState || "OPEN").toUpperCase()}`);
+}
+
 function kindLabel(kind) {
     return t(`kind${String(kind || "UNKNOWN").toUpperCase()}`);
 }
@@ -320,7 +377,11 @@ function renderSummary(summary, remember = true) {
     renderHealth(summary.health);
     renderSnapshot(summary.current, remember);
     renderServices(summary.services);
-    renderEvents(summary.events);
+    if (hasActiveEventFilters()) {
+        refreshEvents().catch(console.error);
+    } else {
+        renderEvents(summary.events);
+    }
     renderAutomation(summary.automation);
 }
 
@@ -377,21 +438,78 @@ function renderServices(services) {
 }
 
 function renderEvents(events) {
-    if (!events || events.length === 0) {
+    state.events = events || [];
+    if (!state.events.some((event) => event.id === state.selectedEventId)) {
+        state.selectedEventId = state.events[0]?.id || null;
+    }
+
+    if (state.events.length === 0) {
         els.eventsList.innerHTML = `<li class="empty">${escapeHtml(t("noEventsYet"))}</li>`;
+        renderEventDetail();
         return;
     }
 
-    els.eventsList.innerHTML = events.map((event) => `
+    els.eventsList.innerHTML = state.events.map((event) => `
         <li>
-            <span class="event-time">${formatTime(event.timestamp)}</span>
-            <span class="status-pill ${String(event.severity).toLowerCase()}">${escapeHtml(severityLabel(event.severity))}</span>
-            <span class="event-message">
-                <strong>${escapeHtml(localizeEventMessage(event.message))}</strong>
-                <small>${escapeHtml(localizeSource(event.source))}${event.details ? ` · ${escapeHtml(localizeServiceMessage(event.details))}` : ""}</small>
-            </span>
+            <button type="button" class="event-row ${event.id === state.selectedEventId ? "active" : ""}" data-event-id="${event.id}" aria-pressed="${event.id === state.selectedEventId}">
+                <span class="event-time">${formatTime(event.timestamp)}</span>
+                <span class="status-pill ${String(event.severity).toLowerCase()}">${escapeHtml(severityLabel(event.severity))}</span>
+                <span class="event-state ${String(event.state || "OPEN").toLowerCase()}">${escapeHtml(eventStateLabel(event.state))}</span>
+                <span class="event-message">
+                    <strong>${escapeHtml(localizeEventMessage(event.message))}</strong>
+                    <small>${escapeHtml(localizeSource(event.source))}${event.details ? ` · ${escapeHtml(localizeServiceMessage(event.details))}` : ""}</small>
+                </span>
+            </button>
         </li>
     `).join("");
+    renderEventDetail();
+}
+
+function renderEventDetail() {
+    const event = state.events.find((item) => item.id === state.selectedEventId);
+    if (!event) {
+        els.eventDetail.innerHTML = `<p class="empty">${escapeHtml(t("selectEventPrompt"))}</p>`;
+        return;
+    }
+
+    const actions = [
+        ["OPEN", "markOpen", "secondary"],
+        ["ACKNOWLEDGED", "markAcknowledged", "secondary"],
+        ["RESOLVED", "markResolved", "primary"],
+    ].filter(([eventState]) => eventState !== event.state);
+
+    els.eventDetail.innerHTML = `
+        <h3>${escapeHtml(t("eventDetails"))}</h3>
+        <dl>
+            <div>
+                <dt>${escapeHtml(t("eventMessage"))}</dt>
+                <dd>${escapeHtml(localizeEventMessage(event.message))}</dd>
+            </div>
+            <div>
+                <dt>${escapeHtml(t("eventStatus"))}</dt>
+                <dd><span class="event-state ${String(event.state || "OPEN").toLowerCase()}">${escapeHtml(eventStateLabel(event.state))}</span></dd>
+            </div>
+            <div>
+                <dt>${escapeHtml(t("eventTimestamp"))}</dt>
+                <dd>${escapeHtml(new Date(event.timestamp).toLocaleString(state.locale === "ko" ? "ko-KR" : "en-US"))}</dd>
+            </div>
+            <div>
+                <dt>${escapeHtml(t("eventSource"))}</dt>
+                <dd>${escapeHtml(localizeSource(event.source))}</dd>
+            </div>
+            <div>
+                <dt>${escapeHtml(t("eventDetailsLabel"))}</dt>
+                <dd>${escapeHtml(event.details ? localizeServiceMessage(event.details) : t("none"))}</dd>
+            </div>
+        </dl>
+        <div class="detail-actions">
+            ${actions.map(([eventState, labelKey, style]) => `
+                <button type="button" class="button compact ${style}" data-event-state-action="${eventState}">
+                    ${escapeHtml(t(labelKey))}
+                </button>
+            `).join("")}
+        </div>
+    `;
 }
 
 function renderAutomation(automation) {
@@ -541,6 +659,76 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
+function hasActiveEventFilters() {
+    return state.eventFilters.severity !== "ALL" ||
+        state.eventFilters.state !== "ALL" ||
+        state.eventFilters.query.trim() !== "";
+}
+
+function buildEventsUrl() {
+    const params = new URLSearchParams({ limit: "100" });
+    if (state.eventFilters.severity !== "ALL") params.set("severity", state.eventFilters.severity);
+    if (state.eventFilters.state !== "ALL") params.set("state", state.eventFilters.state);
+    if (state.eventFilters.query.trim()) params.set("q", state.eventFilters.query.trim());
+    return `/api/events?${params.toString()}`;
+}
+
+function eventMatchesFilters(event) {
+    const query = state.eventFilters.query.trim().toLowerCase();
+    if (state.eventFilters.severity !== "ALL" && event.severity !== state.eventFilters.severity) return false;
+    if (state.eventFilters.state !== "ALL" && event.state !== state.eventFilters.state) return false;
+    if (!query) return true;
+    return [event.message, event.source, event.details]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+}
+
+function syncEventFilterButtons() {
+    els.eventSeverityButtons.forEach((button) => {
+        const active = button.dataset.eventSeverityFilter === state.eventFilters.severity;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+    });
+    els.eventStateButtons.forEach((button) => {
+        const active = button.dataset.eventStateFilter === state.eventFilters.state;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+    });
+}
+
+function setEventFilter(kind, value) {
+    state.eventFilters[kind] = value;
+    syncEventFilterButtons();
+    refreshEvents().catch(console.error);
+}
+
+async function refreshEvents() {
+    const events = await getJson(buildEventsUrl());
+    renderEvents(events);
+}
+
+async function updateSelectedEventState(eventState) {
+    const eventId = state.selectedEventId;
+    if (!eventId) return;
+
+    els.eventDetail.querySelectorAll("button").forEach((button) => {
+        button.disabled = true;
+    });
+
+    const updated = await getJson(`/api/events/${eventId}/state`, {
+        method: "POST",
+        body: JSON.stringify({ state: eventState }),
+    });
+
+    if (eventMatchesFilters(updated)) {
+        state.events = state.events.map((event) => event.id === updated.id ? updated : event);
+        state.selectedEventId = updated.id;
+        renderEvents(state.events);
+    } else {
+        await refreshEvents();
+    }
+}
+
 async function refreshSummary() {
     const summary = await getJson("/api/summary");
     renderSummary(summary);
@@ -575,6 +763,35 @@ function connectSocket() {
 
 els.localeButtons.forEach((button) => {
     button.addEventListener("click", () => setLocale(button.dataset.locale));
+});
+
+els.eventSeverityButtons.forEach((button) => {
+    button.addEventListener("click", () => setEventFilter("severity", button.dataset.eventSeverityFilter));
+});
+
+els.eventStateButtons.forEach((button) => {
+    button.addEventListener("click", () => setEventFilter("state", button.dataset.eventStateFilter));
+});
+
+els.eventsSearchInput.addEventListener("input", () => {
+    clearTimeout(state.eventSearchTimer);
+    state.eventSearchTimer = setTimeout(() => {
+        state.eventFilters.query = els.eventsSearchInput.value;
+        refreshEvents().catch(console.error);
+    }, 250);
+});
+
+els.eventsList.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-event-id]");
+    if (!row) return;
+    state.selectedEventId = Number(row.dataset.eventId);
+    renderEvents(state.events);
+});
+
+els.eventDetail.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-event-state-action]");
+    if (!action) return;
+    updateSelectedEventState(action.dataset.eventStateAction).catch(console.error);
 });
 
 els.runChecksButton.addEventListener("click", async () => {

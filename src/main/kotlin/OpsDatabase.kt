@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.ResultSet
 import java.sql.Statement
 import kotlin.io.path.absolutePathString
 import kotlin.time.Duration.Companion.hours
@@ -105,7 +106,7 @@ class OpsDatabase(private val path: Path) {
     ): EventRecord =
         connection().use { conn ->
             conn.prepareStatement(
-                "insert into events(timestamp, severity, source, message, details) values(?, ?, ?, ?, ?)",
+                "insert into events(timestamp, severity, source, message, details, state) values(?, ?, ?, ?, ?, ?)",
                 Statement.RETURN_GENERATED_KEYS,
             ).use { stmt ->
                 stmt.setLong(1, timestamp)
@@ -113,42 +114,83 @@ class OpsDatabase(private val path: Path) {
                 stmt.setString(3, source)
                 stmt.setString(4, message)
                 stmt.setString(5, details)
+                stmt.setString(6, EventState.OPEN.name)
                 stmt.executeUpdate()
                 stmt.generatedKeys.use { keys ->
                     val id = if (keys.next()) keys.getLong(1) else 0L
-                    EventRecord(id, timestamp, severity, source, message, details)
+                    EventRecord(id, timestamp, severity, source, message, details, EventState.OPEN)
                 }
             }
         }
 
     @Synchronized
-    fun recentEvents(limit: Int = 100): List<EventRecord> =
+    fun recentEvents(
+        limit: Int = 100,
+        severity: EventSeverity? = null,
+        state: EventState? = null,
+        query: String? = null,
+    ): List<EventRecord> =
         connection().use { conn ->
+            val conditions = mutableListOf<String>()
+            val args = mutableListOf<String>()
+
+            severity?.let {
+                conditions += "severity = ?"
+                args += it.name
+            }
+            state?.let {
+                conditions += "state = ?"
+                args += it.name
+            }
+            query?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let {
+                conditions += "(lower(source) like ? or lower(message) like ? or lower(coalesce(details, '')) like ?)"
+                repeat(3) { _ -> args += "%$it%" }
+            }
+
+            val where = if (conditions.isEmpty()) "" else "where ${conditions.joinToString(" and ")}"
             conn.prepareStatement(
                 """
-                select id, timestamp, severity, source, message, details
+                select id, timestamp, severity, source, message, details, state
                 from events
+                $where
                 order by timestamp desc
                 limit ?
                 """.trimIndent(),
             ).use { stmt ->
-                stmt.setInt(1, limit)
+                args.forEachIndexed { index, value -> stmt.setString(index + 1, value) }
+                stmt.setInt(args.size + 1, limit)
                 stmt.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
-                            add(
-                                EventRecord(
-                                    id = rs.getLong("id"),
-                                    timestamp = rs.getLong("timestamp"),
-                                    severity = EventSeverity.valueOf(rs.getString("severity")),
-                                    source = rs.getString("source"),
-                                    message = rs.getString("message"),
-                                    details = rs.getString("details"),
-                                ),
-                            )
+                            add(rs.toEventRecord())
                         }
                     }
                 }
+            }
+        }
+
+    @Synchronized
+    fun updateEventState(id: Long, state: EventState): EventRecord? =
+        connection().use { conn ->
+            val updated = conn.prepareStatement("update events set state = ? where id = ?").use { stmt ->
+                stmt.setString(1, state.name)
+                stmt.setLong(2, id)
+                stmt.executeUpdate()
+            }
+            if (updated == 0) null else eventById(conn, id)
+        }
+
+    private fun eventById(conn: Connection, id: Long): EventRecord? =
+        conn.prepareStatement(
+            """
+            select id, timestamp, severity, source, message, details, state
+            from events
+            where id = ?
+            """.trimIndent(),
+        ).use { stmt ->
+            stmt.setLong(1, id)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) rs.toEventRecord() else null
             }
         }
 
@@ -212,11 +254,15 @@ class OpsDatabase(private val path: Path) {
                         severity text not null,
                         source text not null,
                         message text not null,
-                        details text
+                        details text,
+                        state text not null default 'OPEN'
                     )
                     """.trimIndent(),
                 )
+                ensureEventsStateColumn(conn)
                 stmt.executeUpdate("create index if not exists idx_events_timestamp on events(timestamp desc)")
+                stmt.executeUpdate("create index if not exists idx_events_state on events(state)")
+                stmt.executeUpdate("create index if not exists idx_events_severity on events(severity)")
                 stmt.executeUpdate(
                     """
                     create table if not exists automation_state(
@@ -237,4 +283,28 @@ class OpsDatabase(private val path: Path) {
                 stmt.execute("pragma busy_timeout = 5000")
             }
         }
+
+    private fun ResultSet.toEventRecord(): EventRecord =
+        EventRecord(
+            id = getLong("id"),
+            timestamp = getLong("timestamp"),
+            severity = EventSeverity.valueOf(getString("severity")),
+            source = getString("source"),
+            message = getString("message"),
+            details = getString("details"),
+            state = runCatching { EventState.valueOf(getString("state")) }.getOrDefault(EventState.OPEN),
+        )
+
+    private fun ensureEventsStateColumn(conn: Connection) {
+        val hasState = conn.prepareStatement("pragma table_info(events)").use { stmt ->
+            stmt.executeQuery().use { rs ->
+                generateSequence { if (rs.next()) rs.getString("name") else null }.any { it == "state" }
+            }
+        }
+        if (!hasState) {
+            conn.createStatement().use { stmt ->
+                stmt.executeUpdate("alter table events add column state text not null default 'OPEN'")
+            }
+        }
+    }
 }

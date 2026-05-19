@@ -18,6 +18,13 @@ enum class EventSeverity {
 }
 
 @Serializable
+enum class EventState {
+    OPEN,
+    ACKNOWLEDGED,
+    RESOLVED,
+}
+
+@Serializable
 enum class CheckKind {
     HTTP,
     TCP,
@@ -97,6 +104,12 @@ data class EventRecord(
     val source: String,
     val message: String,
     val details: String? = null,
+    val state: EventState = EventState.OPEN,
+)
+
+@Serializable
+data class EventStateUpdateRequest(
+    val state: EventState,
 )
 
 @Serializable

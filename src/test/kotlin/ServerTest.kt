@@ -2,21 +2,37 @@ package net.lateinint
 
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.Comparator
 import kotlin.test.*
 
 class ServerTest {
+    private var tempDir: Path? = null
 
     @BeforeTest
     fun disableBackgroundJobs() {
         System.setProperty("OPS_DISABLE_BACKGROUND", "true")
+        tempDir = Files.createTempDirectory("ops-hub-test")
+        System.setProperty("OPS_DB_PATH", tempDir!!.resolve("ops-hub.db").toString())
     }
 
     @AfterTest
     fun restoreBackgroundJobs() {
         System.clearProperty("OPS_DISABLE_BACKGROUND")
+        System.clearProperty("OPS_DB_PATH")
+        tempDir?.let { dir ->
+            Files.walk(dir).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+        }
+        tempDir = null
     }
 
     @Test
@@ -60,6 +76,29 @@ class ServerTest {
         assertEquals(HttpStatusCode.OK, response.status)
         assertContains(body, "automation")
         assertContains(body, "current")
+    }
+
+    @Test
+    fun `events can be filtered and acknowledged`() = testApplication {
+        configure()
+
+        val created = client.post("/api/alerts/test") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"message":"Backup failed on app server"}""")
+        }
+        val id = Regex(""""id":(\d+)""").find(created.bodyAsText())!!.groupValues[1]
+
+        val updated = client.post("/api/events/$id/state") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"state":"ACKNOWLEDGED"}""")
+        }
+        val filtered = client.get("/api/events?state=ACKNOWLEDGED&q=backup")
+        val open = client.get("/api/events?state=OPEN&q=backup")
+
+        assertEquals(HttpStatusCode.OK, updated.status)
+        assertContains(updated.bodyAsText(), """"state":"ACKNOWLEDGED"""")
+        assertContains(filtered.bodyAsText(), "Backup failed on app server")
+        assertEquals("[]", open.bodyAsText())
     }
 
     @Test

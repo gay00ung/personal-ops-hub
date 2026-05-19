@@ -83,7 +83,7 @@ fun loadAppConfig(env: Map<String, String> = System.getenv()): AppConfig {
     return AppConfig(
         appName = env["OPS_APP_NAME"].orEmpty().ifBlank { "Personal Ops Hub" },
         port = port,
-        databasePath = Path(env["OPS_DB_PATH"].orEmpty().ifBlank { "data/ops-hub.db" }),
+        databasePath = Path(setting(env, "OPS_DB_PATH").orEmpty().ifBlank { "data/ops-hub.db" }),
         retentionHours = env["OPS_RETENTION_HOURS"]?.toLongOrNull()?.coerceAtLeast(1) ?: 24,
         collectionIntervalSeconds = env["OPS_COLLECTION_INTERVAL_SECONDS"]?.toLongOrNull()?.coerceAtLeast(5) ?: 30,
         auth = AuthConfig(
@@ -121,6 +121,9 @@ fun loadAppConfig(env: Map<String, String> = System.getenv()): AppConfig {
         ),
     )
 }
+
+private fun setting(env: Map<String, String>, key: String): String? =
+    System.getProperty(key)?.takeIf { it.isNotBlank() } ?: env[key]
 
 private fun splitList(value: String?): List<String> =
     value.orEmpty()

@@ -130,9 +130,38 @@
                         <p data-i18n="recentEventsDesc">Incidents, recoveries, reports, deploys, and backup results.</p>
                     </div>
                 </div>
-                <ol id="eventsList" class="events-list">
-                    <li class="empty" data-i18n="noEventsYet">No events yet</li>
-                </ol>
+                <div class="events-toolbar" aria-label="Event filters">
+                    <label class="search-field" for="eventsSearchInput">
+                        <span data-i18n="eventSearchLabel">Search</span>
+                        <input id="eventsSearchInput" type="search" placeholder="Search events" data-i18n-placeholder="eventSearchPlaceholder">
+                    </label>
+                    <div class="filter-group">
+                        <span data-i18n="eventSeverityFilter">Severity</span>
+                        <div class="segmented" role="group" aria-label="Severity">
+                            <button type="button" class="active" data-event-severity-filter="ALL" data-i18n="filterAll">All</button>
+                            <button type="button" data-event-severity-filter="CRITICAL" data-i18n="severityCRITICAL">CRITICAL</button>
+                            <button type="button" data-event-severity-filter="WARNING" data-i18n="severityWARNING">WARNING</button>
+                            <button type="button" data-event-severity-filter="INFO" data-i18n="severityINFO">INFO</button>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <span data-i18n="eventStateFilter">State</span>
+                        <div class="segmented" role="group" aria-label="State">
+                            <button type="button" class="active" data-event-state-filter="ALL" data-i18n="filterAll">All</button>
+                            <button type="button" data-event-state-filter="OPEN" data-i18n="eventStateOPEN">Open</button>
+                            <button type="button" data-event-state-filter="ACKNOWLEDGED" data-i18n="eventStateACKNOWLEDGED">Acknowledged</button>
+                            <button type="button" data-event-state-filter="RESOLVED" data-i18n="eventStateRESOLVED">Resolved</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="events-workspace">
+                    <ol id="eventsList" class="events-list">
+                        <li class="empty" data-i18n="noEventsYet">No events yet</li>
+                    </ol>
+                    <aside id="eventDetail" class="event-detail" aria-live="polite">
+                        <p class="empty" data-i18n="selectEventPrompt">Select an event to inspect it.</p>
+                    </aside>
+                </div>
             </section>
         </main>
     </div>
