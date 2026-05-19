@@ -42,9 +42,12 @@ class ServerTest {
         configure()
 
         val response = client.get("/dashboard")
+        val body = response.bodyAsText()
 
         assertEquals(HttpStatusCode.OK, response.status)
-        assertContains(response.bodyAsText(), "Personal Ops Hub")
+        assertContains(body, "Personal Ops Hub")
+        assertContains(body, "KR")
+        assertContains(body, "EN")
     }
 
     @Test

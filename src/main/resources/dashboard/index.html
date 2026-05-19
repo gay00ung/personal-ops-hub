@@ -14,14 +14,14 @@
                 <span class="brand-mark"></span>
                 <span>
                     <strong>Ops Hub</strong>
-                    <small>personal server</small>
+                    <small data-i18n="brandSubtitle">personal server</small>
                 </span>
             </a>
             <nav class="nav" aria-label="Dashboard">
-                <a href="#overview" class="active">Overview</a>
-                <a href="#services">Services</a>
-                <a href="#events">Events</a>
-                <a href="#automation">Automation</a>
+                <a href="#overview" class="active" data-i18n="navOverview">Overview</a>
+                <a href="#services" data-i18n="navServices">Services</a>
+                <a href="#events" data-i18n="navEvents">Events</a>
+                <a href="#automation" data-i18n="navAutomation">Automation</a>
             </nav>
         </aside>
 
@@ -29,19 +29,24 @@
             <header class="topbar">
                 <div>
                     <h1>Personal Ops Hub</h1>
-                    <p id="hostLine">Waiting for server telemetry...</p>
+                    <p id="hostLine" data-i18n="waitingTelemetry">Waiting for server telemetry...</p>
                 </div>
                 <div class="topbar-actions">
-                    <button id="runChecksButton" class="button secondary" type="button">Run checks</button>
-                    <button id="testAlertButton" class="button primary" type="button">Test alert</button>
+                    <div class="language-toggle" role="group" aria-label="Language">
+                        <button id="localeKoButton" type="button" data-locale="ko">KR</button>
+                        <span aria-hidden="true">|</span>
+                        <button id="localeEnButton" type="button" data-locale="en">EN</button>
+                    </div>
+                    <button id="runChecksButton" class="button secondary" type="button" data-i18n="runChecks">Run checks</button>
+                    <button id="testAlertButton" class="button primary" type="button" data-i18n="testAlert">Test alert</button>
                 </div>
             </header>
 
             <section id="overview" class="grid metrics-grid" aria-label="Current server status">
                 <article class="panel metric">
-                    <span class="label">Overall</span>
+                    <span class="label" data-i18n="metricOverall">Overall</span>
                     <strong id="overallStatus">UNKNOWN</strong>
-                    <small id="overallMessage">No status yet</small>
+                    <small id="overallMessage" data-i18n="noStatusYet">No status yet</small>
                 </article>
                 <article class="panel metric">
                     <span class="label">CPU</span>
@@ -49,12 +54,12 @@
                     <small id="loadValue">load --</small>
                 </article>
                 <article class="panel metric">
-                    <span class="label">Memory</span>
+                    <span class="label" data-i18n="metricMemory">Memory</span>
                     <strong id="memoryValue">--</strong>
                     <small id="memoryDetail">-- used</small>
                 </article>
                 <article class="panel metric">
-                    <span class="label">Disk</span>
+                    <span class="label" data-i18n="metricDisk">Disk</span>
                     <strong id="diskValue">--</strong>
                     <small id="diskDetail">-- used</small>
                 </article>
@@ -63,15 +68,15 @@
             <section class="panel chart-panel" aria-label="One hour resource history">
                 <div class="section-head">
                     <div>
-                        <h2>Last Hour</h2>
-                        <p>CPU and memory trend from stored samples.</p>
+                        <h2 data-i18n="lastHour">Last Hour</h2>
+                        <p data-i18n="lastHourDesc">CPU and memory trend from stored samples.</p>
                     </div>
                     <span id="socketState" class="status-pill unknown">WebSocket</span>
                 </div>
                 <canvas id="historyChart" width="1200" height="300" aria-label="CPU and memory chart"></canvas>
                 <div class="legend">
                     <span><i class="line cpu"></i> CPU</span>
-                    <span><i class="line memory"></i> Memory</span>
+                    <span><i class="line memory"></i> <span data-i18n="metricMemory">Memory</span></span>
                 </div>
             </section>
 
@@ -79,23 +84,23 @@
                 <article class="panel">
                     <div class="section-head">
                         <div>
-                            <h2>Service Health</h2>
-                            <p>HTTP, TCP, Docker, and backup checks.</p>
+                            <h2 data-i18n="serviceHealth">Service Health</h2>
+                            <p data-i18n="serviceHealthDesc">HTTP, TCP, Docker, and backup checks.</p>
                         </div>
                     </div>
                     <div class="table-wrap">
                         <table>
                             <thead>
                             <tr>
-                                <th>Name</th>
-                                <th>Kind</th>
-                                <th>Status</th>
-                                <th>Latency</th>
-                                <th>Message</th>
+                                <th data-i18n="tableName">Name</th>
+                                <th data-i18n="tableKind">Kind</th>
+                                <th data-i18n="tableStatus">Status</th>
+                                <th data-i18n="tableLatency">Latency</th>
+                                <th data-i18n="tableMessage">Message</th>
                             </tr>
                             </thead>
                             <tbody id="servicesBody">
-                            <tr><td colspan="5" class="empty">No checks yet</td></tr>
+                            <tr><td colspan="5" class="empty" data-i18n="noChecksYet">No checks yet</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -104,16 +109,16 @@
                 <article id="automation" class="panel">
                     <div class="section-head">
                         <div>
-                            <h2>Automation</h2>
-                            <p>Reports, webhooks, RSS, and page watches.</p>
+                            <h2 data-i18n="automation">Automation</h2>
+                            <p data-i18n="automationDesc">Reports, webhooks, RSS, and page watches.</p>
                         </div>
                     </div>
                     <dl class="automation-list">
-                        <div><dt>Daily report</dt><dd id="dailyReport">--</dd></div>
-                        <div><dt>Deploy webhook</dt><dd id="deployState">--</dd></div>
-                        <div><dt>Alert targets</dt><dd id="alertTargets">--</dd></div>
-                        <div><dt>RSS feeds</dt><dd id="rssFeeds">--</dd></div>
-                        <div><dt>Page watches</dt><dd id="pageWatches">--</dd></div>
+                        <div><dt data-i18n="dailyReport">Daily report</dt><dd id="dailyReport">--</dd></div>
+                        <div><dt data-i18n="deployWebhook">Deploy webhook</dt><dd id="deployState">--</dd></div>
+                        <div><dt data-i18n="alertTargets">Alert targets</dt><dd id="alertTargets">--</dd></div>
+                        <div><dt data-i18n="rssFeeds">RSS feeds</dt><dd id="rssFeeds">--</dd></div>
+                        <div><dt data-i18n="pageWatches">Page watches</dt><dd id="pageWatches">--</dd></div>
                     </dl>
                 </article>
             </section>
@@ -121,12 +126,12 @@
             <section id="events" class="panel">
                 <div class="section-head">
                     <div>
-                        <h2>Recent Events</h2>
-                        <p>Incidents, recoveries, reports, deploys, and backup results.</p>
+                        <h2 data-i18n="recentEvents">Recent Events</h2>
+                        <p data-i18n="recentEventsDesc">Incidents, recoveries, reports, deploys, and backup results.</p>
                     </div>
                 </div>
                 <ol id="eventsList" class="events-list">
-                    <li class="empty">No events yet</li>
+                    <li class="empty" data-i18n="noEventsYet">No events yet</li>
                 </ol>
             </section>
         </main>
