@@ -1,10 +1,11 @@
 ktor:
     deployment:
-        port: 8080
+        port: "$PORT:8080"
     application:
         modules:
             - net.lateinint.HttpKt.configureHttp
             - net.lateinint.SerializationKt.configureSerialization
+            - net.lateinint.SecurityKt.configureSecurity
             - net.lateinint.StatusPagesKt.configureStatusPages
             - net.lateinint.WebsocketsKt.configureWebsockets
             - net.lateinint.RoutingKt.configureRouting

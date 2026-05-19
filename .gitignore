@@ -13,6 +13,10 @@ build/
 local.properties
 .env
 .env.*
+!.env.example
+data/
+output/
+.playwright-cli/
 
 # Logs
 *.log
