@@ -9,6 +9,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.runBlocking
 import java.net.InetSocketAddress
 import java.nio.file.Files
 import java.nio.file.Path
@@ -73,6 +74,7 @@ class ServerTest {
         assertContains(body, "Personal Ops Hub")
         assertContains(body, "KR")
         assertContains(body, "EN")
+        assertContains(body, "Jobs")
     }
 
     @Test
@@ -85,6 +87,56 @@ class ServerTest {
         assertEquals(HttpStatusCode.OK, response.status)
         assertContains(body, "automation")
         assertContains(body, "current")
+    }
+
+    @Test
+    fun `inventory endpoint returns server job sections`() = testApplication {
+        configure()
+
+        val response = client.get("/api/inventory")
+        val body = response.bodyAsText()
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertContains(body, """"sections"""")
+        assertContains(body, "USER_CRONTAB")
+        assertContains(body, "SYSTEMD_TIMERS")
+    }
+
+    @Test
+    fun `inventory collector parses cron jobs and failed units`() = runBlocking {
+        val etc = tempDir!!.resolve("etc")
+        Files.createDirectories(etc.resolve("cron.d"))
+        Files.createDirectories(etc.resolve("cron.daily"))
+        Files.writeString(etc.resolve("crontab"), "0 2 * * * root /usr/local/bin/system-backup\n")
+        Files.writeString(etc.resolve("cron.d").resolve("app"), "*/10 * * * * app /srv/app/heartbeat\n")
+        Files.writeString(etc.resolve("cron.daily").resolve("cleanup"), "#!/bin/sh\n")
+
+        val collector = OpsInventoryCollector(etc) { command ->
+            when (command) {
+                listOf("crontab", "-l") -> CommandOutput(true, 0, "*/5 * * * * /usr/local/bin/user-task")
+                listOf("systemctl", "list-timers", "--all", "--no-pager", "--plain", "--no-legend") ->
+                    CommandOutput(true, 0, "Wed 2026-05-20 09:00:00 KST  15h left  Tue 2026-05-19 09:00:00 KST  8h ago  backup.timer  backup.service")
+                listOf("systemctl", "list-units", "--type=service", "--state=failed", "--all", "--no-pager", "--plain", "--no-legend") ->
+                    CommandOutput(true, 0, "backup.service loaded failed failed Backup job")
+                listOf("systemctl", "list-units", "--type=timer", "--state=failed", "--all", "--no-pager", "--plain", "--no-legend") ->
+                    CommandOutput(true, 0, "")
+                listOf("systemctl", "list-units", "--type=service", "--state=running", "--all", "--no-pager", "--plain", "--no-legend") ->
+                    CommandOutput(true, 0, "ssh.service loaded active running OpenSSH server")
+                listOf("docker", "ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}") ->
+                    CommandOutput(true, 0, "ops-hub\tpersonal-ops-hub:latest\tUp 1 hour\t0.0.0.0:8080->8080/tcp")
+                listOf("ss", "-tulpnH") ->
+                    CommandOutput(true, 0, "tcp LISTEN 0 4096 0.0.0.0:8080 0.0.0.0:*")
+                else -> CommandOutput(false, null, "unexpected command: ${command.joinToString(" ")}")
+            }
+        }
+
+        val snapshot = collector.collect()
+        val commands = snapshot.sections.flatMap { it.items }.mapNotNull { it.command }
+
+        assertTrue(commands.any { it.contains("/usr/local/bin/user-task") })
+        assertTrue(commands.any { it.contains("/usr/local/bin/system-backup") })
+        assertTrue(commands.any { it.contains("/srv/app/heartbeat") })
+        assertTrue(snapshot.problems.any { it.source == "inventory:systemd-service:backup.service" })
     }
 
     @Test

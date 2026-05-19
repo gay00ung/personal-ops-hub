@@ -6,6 +6,7 @@ const translations = {
         languageLabel: "Language",
         navOverview: "Overview",
         navServices: "Services",
+        navJobs: "Jobs",
         navEvents: "Events",
         navAutomation: "Automation",
         waitingTelemetry: "Waiting for server telemetry...",
@@ -44,6 +45,30 @@ const translations = {
         notConfigured: "Not configured",
         inAppEventsOnly: "In-app events only",
         none: "None",
+        jobsInventory: "Jobs & Inventory",
+        jobsInventoryDesc: "Read-only view of cron, systemd timers, services, containers, and listening ports.",
+        refreshJobs: "Refresh",
+        inventoryLoading: "Loading inventory...",
+        inventoryUpdated: "Updated {time}",
+        inventoryProblemCount: "{count} problems",
+        noInventoryProblems: "No failed services or timers",
+        inventoryUnavailable: "Unavailable",
+        inventoryEmpty: "No entries",
+        inventoryColumnName: "Name",
+        inventoryColumnStatus: "Status",
+        inventoryColumnSchedule: "Schedule",
+        inventoryColumnDetail: "Detail",
+        inventoryColumnCommand: "Command",
+        inventorySectionUSER_CRONTAB: "User crontab",
+        inventorySectionSYSTEM_CRONTAB: "System crontab",
+        inventorySectionCRON_D: "Cron drop-ins",
+        inventorySectionCRON_PERIODIC: "Periodic cron scripts",
+        inventorySectionSYSTEMD_TIMERS: "Systemd timers",
+        inventorySectionFAILED_SERVICES: "Failed services",
+        inventorySectionFAILED_TIMERS: "Failed timers",
+        inventorySectionRUNNING_SERVICES: "Running services",
+        inventorySectionDOCKER_CONTAINERS: "Docker containers",
+        inventorySectionLISTENING_PORTS: "Listening ports",
         recentEvents: "Recent Events",
         recentEventsDesc: "Incidents, recoveries, reports, deploys, and backup results.",
         eventSearchLabel: "Search",
@@ -91,6 +116,7 @@ const translations = {
         languageLabel: "언어",
         navOverview: "개요",
         navServices: "서비스",
+        navJobs: "작업",
         navEvents: "이벤트",
         navAutomation: "자동화",
         waitingTelemetry: "서버 상태를 기다리는 중...",
@@ -129,6 +155,30 @@ const translations = {
         notConfigured: "설정 안 됨",
         inAppEventsOnly: "앱 이벤트만 기록",
         none: "없음",
+        jobsInventory: "작업 및 인벤토리",
+        jobsInventoryDesc: "cron, systemd timer, 서비스, 컨테이너, 열린 포트를 읽기 전용으로 확인합니다.",
+        refreshJobs: "새로고침",
+        inventoryLoading: "인벤토리 불러오는 중...",
+        inventoryUpdated: "{time} 갱신",
+        inventoryProblemCount: "문제 {count}개",
+        noInventoryProblems: "실패한 서비스나 타이머 없음",
+        inventoryUnavailable: "사용 불가",
+        inventoryEmpty: "항목 없음",
+        inventoryColumnName: "이름",
+        inventoryColumnStatus: "상태",
+        inventoryColumnSchedule: "스케줄",
+        inventoryColumnDetail: "상세",
+        inventoryColumnCommand: "명령",
+        inventorySectionUSER_CRONTAB: "사용자 crontab",
+        inventorySectionSYSTEM_CRONTAB: "시스템 crontab",
+        inventorySectionCRON_D: "cron.d 작업",
+        inventorySectionCRON_PERIODIC: "주기별 cron 스크립트",
+        inventorySectionSYSTEMD_TIMERS: "systemd 타이머",
+        inventorySectionFAILED_SERVICES: "실패한 서비스",
+        inventorySectionFAILED_TIMERS: "실패한 타이머",
+        inventorySectionRUNNING_SERVICES: "실행 중인 서비스",
+        inventorySectionDOCKER_CONTAINERS: "Docker 컨테이너",
+        inventorySectionLISTENING_PORTS: "열린 포트",
         recentEvents: "최근 이벤트",
         recentEventsDesc: "장애, 복구, 리포트, 배포, 백업 결과입니다.",
         eventSearchLabel: "검색",
@@ -179,6 +229,7 @@ const state = {
     locale: getInitialLocale(),
     latestSummary: null,
     latestSnapshot: null,
+    latestInventory: null,
     latestSocketState: "websocket",
     navLockUntil: 0,
     events: [],
@@ -214,6 +265,10 @@ const els = {
     alertTargets: document.getElementById("alertTargets"),
     rssFeeds: document.getElementById("rssFeeds"),
     pageWatches: document.getElementById("pageWatches"),
+    inventoryUpdated: document.getElementById("inventoryUpdated"),
+    inventoryProblems: document.getElementById("inventoryProblems"),
+    inventorySections: document.getElementById("inventorySections"),
+    refreshInventoryButton: document.getElementById("refreshInventoryButton"),
     runChecksButton: document.getElementById("runChecksButton"),
     testAlertButton: document.getElementById("testAlertButton"),
     languageToggle: document.querySelector(".language-toggle"),
@@ -260,7 +315,8 @@ function syncActiveNavFromScroll() {
         return;
     }
 
-    const scrollTargets = ["overview", "services", "events"]
+    const scrollTargets = Array.from(els.navLinks)
+        .map((link) => link.getAttribute("href")?.replace(/^#/, ""))
         .map((id) => document.getElementById(id))
         .filter(Boolean);
     const offset = 160;
@@ -314,6 +370,7 @@ function applyLocale() {
     setSocketState(state.latestSocketState);
     if (state.latestSummary) renderSummary(state.latestSummary, false);
     else if (state.latestSnapshot) renderSnapshot(state.latestSnapshot, false);
+    if (state.latestInventory) renderInventory(state.latestInventory, false);
     syncEventFilterButtons();
     renderEventDetail();
     drawChart();
@@ -534,6 +591,82 @@ function renderAutomation(automation) {
     els.pageWatches.textContent = automation.pageWatches.length
         ? automation.pageWatches.map((watch) => watch.name).join(", ")
         : t("none");
+}
+
+function renderInventory(inventory, remember = true) {
+    if (remember) state.latestInventory = inventory;
+    els.inventoryUpdated.textContent = t("inventoryUpdated", { time: formatTime(inventory.timestamp) });
+
+    if (inventory.problems?.length) {
+        els.inventoryProblems.innerHTML = `
+            <span class="status-pill warning">${escapeHtml(t("inventoryProblemCount", { count: inventory.problems.length }))}</span>
+            ${inventory.problems.slice(0, 3).map((problem) => `
+                <span class="inventory-problem">${escapeHtml(localizeEventMessage(problem.message))}</span>
+            `).join("")}
+        `;
+    } else {
+        els.inventoryProblems.innerHTML = `<span class="cell-status up">${escapeHtml(t("noInventoryProblems"))}</span>`;
+    }
+
+    const sections = inventory.sections || [];
+    if (sections.length === 0) {
+        els.inventorySections.innerHTML = `<p class="empty">${escapeHtml(t("inventoryEmpty"))}</p>`;
+        return;
+    }
+
+    els.inventorySections.innerHTML = sections.map(renderInventorySection).join("");
+}
+
+function renderInventorySection(section) {
+    const title = t(`inventorySection${section.key}`) || section.title;
+    const state = section.available ? `${section.items.length}` : t("inventoryUnavailable");
+    const rows = section.available
+        ? renderInventoryRows(section.items)
+        : `<tr><td colspan="5" class="empty">${escapeHtml(section.message || t("inventoryUnavailable"))}</td></tr>`;
+
+    return `
+        <article class="inventory-section">
+            <div class="inventory-section-head">
+                <div>
+                    <h3>${escapeHtml(title)}</h3>
+                    <small>${escapeHtml(section.source)}</small>
+                </div>
+                <span class="inventory-count ${section.available ? "" : "unavailable"}">${escapeHtml(state)}</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>${escapeHtml(t("inventoryColumnName"))}</th>
+                        <th>${escapeHtml(t("inventoryColumnStatus"))}</th>
+                        <th>${escapeHtml(t("inventoryColumnSchedule"))}</th>
+                        <th>${escapeHtml(t("inventoryColumnDetail"))}</th>
+                        <th>${escapeHtml(t("inventoryColumnCommand"))}</th>
+                    </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </article>
+    `;
+}
+
+function renderInventoryRows(items) {
+    if (!items || items.length === 0) {
+        return `<tr><td colspan="5" class="empty">${escapeHtml(t("inventoryEmpty"))}</td></tr>`;
+    }
+    return items.map((item) => `
+        <tr>
+            <td>
+                <strong class="inventory-name">${escapeHtml(item.name)}</strong>
+                <small>${escapeHtml(item.kind || "")}</small>
+            </td>
+            <td>${escapeHtml(item.status || "--")}</td>
+            <td>${escapeHtml(item.schedule || "--")}</td>
+            <td>${escapeHtml(item.detail || "--")}</td>
+            <td><code>${escapeHtml(item.command || item.raw || "--")}</code></td>
+        </tr>
+    `).join("");
 }
 
 function localizeHealthMessage(message) {
@@ -757,6 +890,17 @@ async function refreshHistory() {
     drawChart();
 }
 
+async function refreshInventory() {
+    els.refreshInventoryButton.disabled = true;
+    try {
+        const inventory = await getJson("/api/inventory");
+        renderInventory(inventory);
+        await refreshEvents();
+    } finally {
+        els.refreshInventoryButton.disabled = false;
+    }
+}
+
 function connectSocket() {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(`${protocol}://${window.location.host}/ws/metrics`);
@@ -833,9 +977,14 @@ els.testAlertButton.addEventListener("click", async () => {
     }
 });
 
+els.refreshInventoryButton.addEventListener("click", () => {
+    refreshInventory().catch(console.error);
+});
+
 bindNavigation();
 applyLocale();
 refreshHistory().catch(console.error);
 refreshSummary().catch(console.error);
+refreshInventory().catch(console.error);
 connectSocket();
 setInterval(() => refreshSummary().catch(console.error), 15000);

@@ -24,6 +24,7 @@ class OpsHub(val config: AppConfig) {
     val metricsCollector = SystemMetricsCollector(config)
     val notifier = Notifier(config.alerts)
     val serviceMonitor = ServiceMonitor(config)
+    val inventoryCollector = OpsInventoryCollector()
     val automationRunner = AutomationRunner(config, database, metricsCollector, notifier)
 
     private val started = AtomicBoolean(false)
@@ -122,6 +123,12 @@ class OpsHub(val config: AppConfig) {
         )
     }
 
+    suspend fun inventorySnapshot(): OpsInventorySnapshot {
+        val snapshot = inventoryCollector.collect()
+        recordInventoryProblems(snapshot.problems)
+        return snapshot
+    }
+
     private suspend fun evaluateServiceTransition(result: ServiceCheckResult) {
         val key = "service:${result.kind}:${result.name}"
         val previous = lastHealthStates.put(key, result.status)
@@ -174,6 +181,25 @@ class OpsHub(val config: AppConfig) {
             val resolvedCount = database.resolveOpenEvents(source)
             database.insertEvent(EventSeverity.INFO, source, message)
             notifier.sendRecovery("Resource recovered", source, resolvedCount, message)
+        }
+    }
+
+    private fun recordInventoryProblems(problems: List<InventoryProblem>) {
+        val currentProblems = problems.associateBy { it.source }
+        val knownOpenSources = listOf("inventory:systemd-service:", "inventory:systemd-timer:")
+            .flatMap(database::openActionEventSources)
+            .toSet()
+
+        for (source in knownOpenSources - currentProblems.keys) {
+            val resolved = database.resolveOpenEvents(source)
+            if (resolved > 0) {
+                database.insertEvent(EventSeverity.INFO, source, "Inventory issue recovered")
+            }
+        }
+
+        for ((source, problem) in currentProblems) {
+            if (source in knownOpenSources) continue
+            database.insertEvent(problem.severity, source, problem.message, problem.detail)
         }
     }
 

@@ -210,6 +210,30 @@ class OpsDatabase(private val path: Path) {
             }
         }
 
+    @Synchronized
+    fun openActionEventSources(prefix: String): List<String> =
+        connection().use { conn ->
+            conn.prepareStatement(
+                """
+                select distinct source
+                from events
+                where action_required = 1
+                    and state in (?, ?)
+                    and source like ?
+                order by source
+                """.trimIndent(),
+            ).use { stmt ->
+                stmt.setString(1, EventState.OPEN.name)
+                stmt.setString(2, EventState.ACKNOWLEDGED.name)
+                stmt.setString(3, "$prefix%")
+                stmt.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) add(rs.getString("source"))
+                    }
+                }
+            }
+        }
+
     private fun eventById(conn: Connection, id: Long): EventRecord? =
         conn.prepareStatement(
             """

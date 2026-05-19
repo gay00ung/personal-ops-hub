@@ -386,7 +386,8 @@ canvas {
 }
 
 .two-column .panel,
-#events.panel {
+#events.panel,
+#jobs.panel {
     padding: 18px;
 }
 
@@ -477,6 +478,129 @@ td:last-child {
     font-size: 14px;
     line-height: 1.45;
     overflow-wrap: anywhere;
+}
+
+.inventory-panel {
+    margin-bottom: 14px;
+}
+
+.inventory-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.inventory-updated {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.inventory-problems {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.inventory-problem {
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    padding: 0 10px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 12px;
+    font-weight: 720;
+}
+
+.inventory-sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.inventory-section {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fbfcff;
+}
+
+.inventory-section-head {
+    min-height: 64px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+    background: #ffffff;
+}
+
+.inventory-section-head h3 {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.3;
+}
+
+.inventory-section-head small {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.inventory-count {
+    min-width: 34px;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 0 8px;
+    background: #e0f2fe;
+    color: #075985;
+    font-size: 12px;
+    font-weight: 780;
+}
+
+.inventory-count.unavailable {
+    background: #e5e7eb;
+    color: #4b5563;
+}
+
+.inventory-name {
+    display: block;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.inventory-name + small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.inventory-section code {
+    display: inline-block;
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+    color: #374151;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
 }
 
 .events-toolbar {
@@ -710,6 +834,7 @@ td:last-child {
 
     .metrics-grid,
     .two-column,
+    .inventory-sections,
     .events-toolbar,
     .events-workspace {
         grid-template-columns: 1fr;
@@ -747,6 +872,15 @@ td:last-child {
     .automation-list div {
         grid-template-columns: 1fr;
         gap: 4px;
+    }
+
+    .inventory-summary {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .inventory-problems {
+        justify-content: flex-start;
     }
 
     .segmented {

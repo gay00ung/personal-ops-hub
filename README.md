@@ -7,6 +7,7 @@ A personal server monitoring and automation hub built with Ktor.
 - Shows CPU, memory, disk, uptime, load average, and JVM status.
 - Stores recent metrics in SQLite for a one-hour dashboard graph.
 - Checks HTTP endpoints, TCP ports, Docker containers, and backup markers.
+- Shows a read-only server inventory for cron, systemd timers, services, Docker, and listening ports.
 - Records incident, recovery, deploy, backup, RSS, page-watch, and report events.
 - Streams live metrics over WebSocket at `/ws/metrics`.
 - Sends alerts to Discord and/or Telegram when configured.
@@ -77,6 +78,7 @@ Alerts are sent for action-required events such as service failures, resource th
 - `GET /api/metrics/history?since=<epoch-ms>`
 - `GET /api/services`
 - `POST /api/services/run`
+- `GET /api/inventory`
 - `GET /api/events`
 - `GET /api/automation`
 - `POST /api/alerts/test`

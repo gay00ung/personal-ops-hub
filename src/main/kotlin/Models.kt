@@ -138,6 +138,42 @@ data class AutomationSummary(
 )
 
 @Serializable
+data class OpsInventorySnapshot(
+    val timestamp: Long,
+    val sections: List<InventorySection>,
+    val problems: List<InventoryProblem>,
+)
+
+@Serializable
+data class InventorySection(
+    val key: String,
+    val title: String,
+    val source: String,
+    val available: Boolean,
+    val message: String? = null,
+    val items: List<InventoryItem> = emptyList(),
+)
+
+@Serializable
+data class InventoryItem(
+    val kind: String,
+    val name: String,
+    val status: String? = null,
+    val schedule: String? = null,
+    val command: String? = null,
+    val detail: String? = null,
+    val raw: String? = null,
+)
+
+@Serializable
+data class InventoryProblem(
+    val severity: EventSeverity,
+    val source: String,
+    val message: String,
+    val detail: String? = null,
+)
+
+@Serializable
 data class NamedUrlDto(
     val name: String,
     val url: String,

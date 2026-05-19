@@ -20,6 +20,7 @@
             <nav class="nav" aria-label="Dashboard">
                 <a href="#overview" class="active" data-i18n="navOverview">Overview</a>
                 <a href="#services" data-i18n="navServices">Services</a>
+                <a href="#jobs" data-i18n="navJobs">Jobs</a>
                 <a href="#events" data-i18n="navEvents">Events</a>
                 <a href="#automation" data-i18n="navAutomation">Automation</a>
             </nav>
@@ -121,6 +122,23 @@
                         <div><dt data-i18n="pageWatches">Page watches</dt><dd id="pageWatches">--</dd></div>
                     </dl>
                 </article>
+            </section>
+
+            <section id="jobs" class="panel inventory-panel">
+                <div class="section-head">
+                    <div>
+                        <h2 data-i18n="jobsInventory">Jobs & Inventory</h2>
+                        <p data-i18n="jobsInventoryDesc">Read-only view of cron, systemd timers, services, containers, and listening ports.</p>
+                    </div>
+                    <button id="refreshInventoryButton" class="button secondary" type="button" data-i18n="refreshJobs">Refresh</button>
+                </div>
+                <div class="inventory-summary">
+                    <span id="inventoryUpdated" class="inventory-updated">--</span>
+                    <div id="inventoryProblems" class="inventory-problems"></div>
+                </div>
+                <div id="inventorySections" class="inventory-sections">
+                    <p class="empty" data-i18n="inventoryLoading">Loading inventory...</p>
+                </div>
             </section>
 
             <section id="events" class="panel">

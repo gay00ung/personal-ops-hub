@@ -106,6 +106,10 @@ fun Application.configureRouting() {
                     call.respond(hub.automationRunner.summary())
                 }
 
+                get("/inventory") {
+                    call.respond(hub.inventorySnapshot())
+                }
+
                 post("/alerts/test") {
                     if (!call.requireAdminToken(hub)) return@post
                     val request = runCatching { call.receive<AlertTestRequest>() }.getOrDefault(AlertTestRequest())
