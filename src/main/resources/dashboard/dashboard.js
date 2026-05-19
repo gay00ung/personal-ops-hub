@@ -140,6 +140,7 @@ const state = {
     latestSummary: null,
     latestSnapshot: null,
     latestSocketState: "websocket",
+    navLockUntil: 0,
 };
 
 const els = {
@@ -165,6 +166,7 @@ const els = {
     testAlertButton: document.getElementById("testAlertButton"),
     languageToggle: document.querySelector(".language-toggle"),
     localeButtons: document.querySelectorAll("[data-locale]"),
+    navLinks: document.querySelectorAll(".nav a[href^='#']"),
 };
 
 function getInitialLocale() {
@@ -184,6 +186,63 @@ function setLocale(locale) {
     state.locale = locale;
     localStorage.setItem(LOCALE_KEY, locale);
     applyLocale();
+}
+
+function setActiveNav(sectionId) {
+    if (!sectionId) return;
+    els.navLinks.forEach((link) => {
+        const active = link.getAttribute("href") === `#${sectionId}`;
+        link.classList.toggle("active", active);
+        if (active) link.setAttribute("aria-current", "location");
+        else link.removeAttribute("aria-current");
+    });
+}
+
+function syncActiveNavFromScroll() {
+    if (Date.now() < state.navLockUntil) return;
+
+    const hashId = window.location.hash.replace(/^#/, "");
+    const hashTarget = hashId ? document.getElementById(hashId) : null;
+    if (hashTarget && isMostlyVisible(hashTarget)) {
+        setActiveNav(hashId);
+        return;
+    }
+
+    const scrollTargets = ["overview", "services", "events"]
+        .map((id) => document.getElementById(id))
+        .filter(Boolean);
+    const offset = 160;
+    const current = scrollTargets.reduce((active, section) => {
+        return section.getBoundingClientRect().top <= offset ? section : active;
+    }, scrollTargets[0]);
+
+    setActiveNav(current?.id);
+}
+
+function isMostlyVisible(element) {
+    const rect = element.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    return rect.top < viewportHeight * 0.75 && rect.bottom > 80;
+}
+
+function bindNavigation() {
+    els.navLinks.forEach((link) => {
+        link.addEventListener("click", () => {
+            const sectionId = link.getAttribute("href")?.replace(/^#/, "");
+            state.navLockUntil = Date.now() + 900;
+            setActiveNav(sectionId);
+        });
+    });
+
+    window.addEventListener("hashchange", () => {
+        const sectionId = window.location.hash.replace(/^#/, "");
+        if (document.getElementById(sectionId)) setActiveNav(sectionId);
+    });
+    window.addEventListener("scroll", syncActiveNavFromScroll, { passive: true });
+    window.addEventListener("resize", syncActiveNavFromScroll);
+
+    setActiveNav(window.location.hash.replace(/^#/, "") || "overview");
+    syncActiveNavFromScroll();
 }
 
 function applyLocale() {
@@ -541,6 +600,7 @@ els.testAlertButton.addEventListener("click", async () => {
     }
 });
 
+bindNavigation();
 applyLocale();
 refreshHistory().catch(console.error);
 refreshSummary().catch(console.error);
