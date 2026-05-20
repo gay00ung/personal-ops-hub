@@ -28,6 +28,24 @@ Open:
 http://127.0.0.1:8080/dashboard
 ```
 
+## Server install and update
+
+On an Ubuntu server, install the app as a systemd service:
+
+```bash
+sudo scripts/install-systemd.sh
+```
+
+The installer builds the app, creates `/etc/personal-ops-hub/personal-ops-hub.env` if it does not exist, creates `/var/lib/personal-ops-hub`, installs the `personal-ops-hub` systemd unit, enables it, and starts it. Existing env files are preserved.
+
+After pushing new code, update the server with:
+
+```bash
+sudo scripts/update-server.sh
+```
+
+The updater runs `git pull --ff-only`, rebuilds the distribution, restarts `personal-ops-hub`, and checks `http://127.0.0.1:8080/api/health`.
+
 ## Docker run
 
 ```bash
