@@ -11,9 +11,22 @@ class ManagementService(
         runManagedCommand(command, timeout)
     },
 ) {
-    suspend fun collectSections(): List<InventorySection> = buildList {
+    suspend fun collectSections(visibleSections: List<InventorySection> = emptyList()): List<InventorySection> = buildList {
         if (config.allowedSystemdUnits.isNotEmpty()) add(systemdSection())
-        if (config.allowedDockerContainers.isNotEmpty()) add(dockerSection())
+        if (config.allowedDockerContainers.isNotEmpty() && !config.allowAllDockerContainers) {
+            dockerSection(visibleSections)?.let(::add)
+        }
+    }
+
+    fun decorateSection(section: InventorySection): InventorySection {
+        if (section.key != "DOCKER_CONTAINERS" || !config.enabled) return section
+        return section.copy(
+            items = section.items.map { item ->
+                if (!isDockerContainerAllowed(item.name)) item else item.copy(
+                    actions = allowedDockerActions(item.status.orEmpty(), commandSucceeded = true),
+                )
+            },
+        )
     }
 
     suspend fun runAction(request: ManagementActionRequest): ManagementActionResponse {
@@ -95,7 +108,7 @@ class ManagementService(
         )
     }
 
-    private suspend fun dockerSection(): InventorySection {
+    private suspend fun dockerSection(visibleSections: List<InventorySection>): InventorySection? {
         if (!config.enabled) {
             return InventorySection(
                 key = "MANAGED_DOCKER_CONTAINERS",
@@ -106,7 +119,17 @@ class ManagementService(
             )
         }
 
-        val items = config.allowedDockerContainers.map { container ->
+        val visibleDockerNames = visibleSections
+            .firstOrNull { it.key == "DOCKER_CONTAINERS" }
+            ?.items
+            .orEmpty()
+            .map { it.name }
+            .toSet()
+
+        val missingAllowedContainers = config.allowedDockerContainers.filter { it !in visibleDockerNames }
+        if (missingAllowedContainers.isEmpty()) return null
+
+        val items = missingAllowedContainers.map { container ->
             val result = commandRunner(
                 listOf("docker", "inspect", "--format", "{{.Name}}\t{{.State.Status}}\t{{.Config.Image}}", container),
                 5,
@@ -155,7 +178,7 @@ class ManagementService(
                 listOf("systemctl", request.action.commandName(), name)
             }
             ManagementTargetType.DOCKER_CONTAINER -> {
-                if (name !in config.allowedDockerContainers) throw IllegalArgumentException("docker container is not allowed: $name")
+                if (!isDockerContainerAllowed(name)) throw IllegalArgumentException("docker container is not allowed: $name")
                 listOf("docker", request.action.commandName(), name)
             }
         }
@@ -164,12 +187,17 @@ class ManagementService(
     private fun normalizedName(targetType: ManagementTargetType, name: String): String {
         val trimmed = name.trim()
         require(trimmed.isNotBlank()) { "target name is required" }
-        require(!trimmed.contains('/')) { "target name must not contain a slash" }
         return when (targetType) {
             ManagementTargetType.SYSTEMD_UNIT -> normalizeSystemdUnitName(trimmed)
-            ManagementTargetType.DOCKER_CONTAINER -> trimmed
+            ManagementTargetType.DOCKER_CONTAINER -> {
+                require(dockerNameRegex.matches(trimmed)) { "invalid docker container name" }
+                trimmed
+            }
         }
     }
+
+    private fun isDockerContainerAllowed(name: String): Boolean =
+        config.allowAllDockerContainers || name in config.allowedDockerContainers
 
     private fun allowedSystemdActions(unit: String, loadState: String, activeState: String): List<ManagementAction> {
         if (!config.enabled || loadState == "not-found") return emptyList()
@@ -183,11 +211,16 @@ class ManagementService(
 
     private fun allowedDockerActions(status: String, commandSucceeded: Boolean): List<ManagementAction> {
         if (!config.enabled || !commandSucceeded) return emptyList()
-        return if (status == "running") {
+        return if (status.isRunningDockerStatus()) {
             listOf(ManagementAction.RESTART, ManagementAction.STOP)
         } else {
             listOf(ManagementAction.START, ManagementAction.RESTART)
         }
+    }
+
+    private fun String.isRunningDockerStatus(): Boolean {
+        val value = trim().lowercase()
+        return value == "running" || value.startsWith("up ")
     }
 
     private fun ManagementAction.commandName(): String =
@@ -201,6 +234,10 @@ class ManagementService(
             ManagementTargetType.SYSTEMD_UNIT -> "systemd unit"
             ManagementTargetType.DOCKER_CONTAINER -> "docker container"
         }
+
+    private companion object {
+        private val dockerNameRegex = Regex("""[A-Za-z0-9][A-Za-z0-9_.-]*""")
+    }
 }
 
 private suspend fun runManagedCommand(command: List<String>, timeoutSeconds: Long): CommandOutput =

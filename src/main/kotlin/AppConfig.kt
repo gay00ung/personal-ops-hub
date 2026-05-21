@@ -76,7 +76,9 @@ data class ManagementConfig(
     val allowedSystemdUnits: List<String>,
     val restartOnlySystemdUnits: Set<String>,
     val allowedDockerContainers: List<String>,
-)
+) {
+    val allowAllDockerContainers: Boolean get() = "*" in allowedDockerContainers
+}
 
 data class NamedUrlConfig(
     val name: String,

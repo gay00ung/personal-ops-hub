@@ -58,7 +58,7 @@ OPS_RESTART_ONLY_SYSTEMD_UNITS=personal-ops-hub.service
 OPS_ALLOWED_DOCKER_CONTAINERS=
 ```
 
-Only targets listed in `OPS_ALLOWED_SYSTEMD_UNITS` or `OPS_ALLOWED_DOCKER_CONTAINERS` get action buttons. `OPS_RESTART_ONLY_SYSTEMD_UNITS` can be used for units that should never be stopped from the UI. The generated systemd install env file defaults the app's own unit to restart-only.
+Only targets listed in `OPS_ALLOWED_SYSTEMD_UNITS` or `OPS_ALLOWED_DOCKER_CONTAINERS` get action buttons. Set `OPS_ALLOWED_DOCKER_CONTAINERS=*` to allow actions on every Docker container visible in `docker ps --all`. `OPS_RESTART_ONLY_SYSTEMD_UNITS` can be used for units that should never be stopped from the UI. The generated systemd install env file defaults the app's own unit to restart-only.
 
 ## Docker run
 
@@ -87,7 +87,7 @@ Use Caddy with `Caddyfile.example` as the public HTTPS reverse proxy.
 - `OPS_MANAGE_ENABLED`: enables dashboard start/stop/restart actions.
 - `OPS_ALLOWED_SYSTEMD_UNITS`: comma-separated allowlist for managed systemd units.
 - `OPS_RESTART_ONLY_SYSTEMD_UNITS`: systemd units that can be restarted but not stopped from the UI.
-- `OPS_ALLOWED_DOCKER_CONTAINERS`: comma-separated allowlist for managed Docker containers.
+- `OPS_ALLOWED_DOCKER_CONTAINERS`: comma-separated allowlist for managed Docker containers. Use `*` to allow every visible Docker container.
 
 ## Alerts
 

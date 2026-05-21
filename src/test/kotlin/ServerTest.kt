@@ -130,7 +130,7 @@ class ServerTest {
                     CommandOutput(true, 0, "")
                 listOf("systemctl", "list-units", "--type=service", "--state=running", "--all", "--no-pager", "--plain", "--no-legend") ->
                     CommandOutput(true, 0, "ssh.service loaded active running OpenSSH server")
-                listOf("docker", "ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}") ->
+                listOf("docker", "ps", "--all", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}") ->
                     CommandOutput(true, 0, "ops-hub\tpersonal-ops-hub:latest\tUp 1 hour\t0.0.0.0:8080->8080/tcp")
                 listOf("ss", "-tulpnH") ->
                     CommandOutput(true, 0, "tcp LISTEN 0 4096 0.0.0.0:8080 0.0.0.0:*")
@@ -230,6 +230,45 @@ class ServerTest {
         assertEquals(listOf(ManagementAction.RESTART, ManagementAction.STOP), systemdItems.single { it.name == "demo.service" }.actions)
         assertEquals(listOf(ManagementAction.RESTART), systemdItems.single { it.name == "personal-ops-hub.service" }.actions)
         assertEquals(listOf(ManagementAction.RESTART, ManagementAction.STOP), dockerItems.single().actions)
+    }
+
+    @Test
+    fun `management decorates visible docker inventory when wildcard is enabled`() = runBlocking {
+        val database = OpsDatabase(tempDir!!.resolve("management-wildcard.db"))
+        val commands = mutableListOf<List<String>>()
+        val service = ManagementService(
+            config = ManagementConfig(
+                enabled = true,
+                allowedSystemdUnits = emptyList(),
+                restartOnlySystemdUnits = emptySet(),
+                allowedDockerContainers = listOf("*"),
+            ),
+            database = database,
+        ) { command, _ ->
+            commands += command
+            CommandOutput(true, 0, "ok")
+        }
+
+        val dockerSection = InventorySection(
+            key = "DOCKER_CONTAINERS",
+            title = "Docker containers",
+            source = "docker ps --all",
+            available = true,
+            items = listOf(
+                InventoryItem(kind = "docker", name = "web", status = "Up 3 weeks"),
+                InventoryItem(kind = "docker", name = "postgres", status = "Exited (0) 2 hours ago"),
+            ),
+        )
+
+        val decorated = service.decorateSection(dockerSection)
+        val response = service.runAction(
+            ManagementActionRequest(ManagementTargetType.DOCKER_CONTAINER, "postgres", ManagementAction.START),
+        )
+
+        assertEquals(listOf(ManagementAction.RESTART, ManagementAction.STOP), decorated.items.single { it.name == "web" }.actions)
+        assertEquals(listOf(ManagementAction.START, ManagementAction.RESTART), decorated.items.single { it.name == "postgres" }.actions)
+        assertEquals(listOf("docker", "start", "postgres"), commands.single())
+        assertTrue(response.success)
     }
 
     @Test

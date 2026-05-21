@@ -126,8 +126,9 @@ class OpsHub(val config: AppConfig) {
 
     suspend fun inventorySnapshot(): OpsInventorySnapshot {
         val raw = inventoryCollector.collect()
-        val managedSections = managementService.collectSections()
-        val snapshot = raw.copy(sections = raw.sections + managedSections)
+        val decoratedSections = raw.sections.map(managementService::decorateSection)
+        val managedSections = managementService.collectSections(decoratedSections)
+        val snapshot = raw.copy(sections = decoratedSections + managedSections)
         recordInventoryProblems(snapshot.problems)
         return snapshot
     }

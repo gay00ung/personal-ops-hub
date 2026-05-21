@@ -147,8 +147,8 @@ class OpsInventoryCollector(
         commandSection(
             key = "DOCKER_CONTAINERS",
             title = "Docker containers",
-            source = "docker ps",
-            command = listOf("docker", "ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"),
+            source = "docker ps --all",
+            command = listOf("docker", "ps", "--all", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"),
             parser = ::parseDockerContainers,
         )
 

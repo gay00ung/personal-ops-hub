@@ -84,6 +84,7 @@ OPS_HTTP_CHECKS=ops-hub=http://127.0.0.1:$PORT/api/health
 OPS_MANAGE_ENABLED=false
 OPS_ALLOWED_SYSTEMD_UNITS=$SERVICE_NAME.service
 OPS_RESTART_ONLY_SYSTEMD_UNITS=$SERVICE_NAME.service
+# Use "*" to allow actions on every Docker container visible in docker ps --all.
 OPS_ALLOWED_DOCKER_CONTAINERS=
 EOF
   chmod 600 "$ENV_FILE"

@@ -659,10 +659,10 @@ function renderInventorySection(section) {
                     <thead>
                     <tr>
                         <th>${escapeHtml(t("inventoryColumnName"))}</th>
+                        <th>${escapeHtml(t("inventoryColumnActions"))}</th>
                         <th>${escapeHtml(t("inventoryColumnStatus"))}</th>
                         <th>${escapeHtml(t("inventoryColumnSchedule"))}</th>
                         <th>${escapeHtml(t("inventoryColumnDetail"))}</th>
-                        <th>${escapeHtml(t("inventoryColumnActions"))}</th>
                         <th>${escapeHtml(t("inventoryColumnCommand"))}</th>
                     </tr>
                     </thead>
@@ -683,10 +683,10 @@ function renderInventoryRows(items) {
                 <strong class="inventory-name">${escapeHtml(item.name)}</strong>
                 <small>${escapeHtml(item.kind || "")}</small>
             </td>
+            <td>${renderManagementActions(item)}</td>
             <td>${escapeHtml(item.status || "--")}</td>
             <td>${escapeHtml(item.schedule || "--")}</td>
             <td>${escapeHtml(item.detail || "--")}</td>
-            <td>${renderManagementActions(item)}</td>
             <td><code>${escapeHtml(item.command || item.raw || "--")}</code></td>
         </tr>
     `).join("");
@@ -712,6 +712,7 @@ function renderManagementActions(item) {
 
 function managementTargetType(kind) {
     if (kind === "managed-systemd-unit") return "SYSTEMD_UNIT";
+    if (kind === "docker") return "DOCKER_CONTAINER";
     if (kind === "managed-docker-container") return "DOCKER_CONTAINER";
     return null;
 }
