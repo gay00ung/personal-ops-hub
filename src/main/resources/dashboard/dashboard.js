@@ -662,8 +662,8 @@ function renderInventorySection(section) {
                         <th>${escapeHtml(t("inventoryColumnStatus"))}</th>
                         <th>${escapeHtml(t("inventoryColumnSchedule"))}</th>
                         <th>${escapeHtml(t("inventoryColumnDetail"))}</th>
-                        <th>${escapeHtml(t("inventoryColumnCommand"))}</th>
                         <th>${escapeHtml(t("inventoryColumnActions"))}</th>
+                        <th>${escapeHtml(t("inventoryColumnCommand"))}</th>
                     </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -686,8 +686,8 @@ function renderInventoryRows(items) {
             <td>${escapeHtml(item.status || "--")}</td>
             <td>${escapeHtml(item.schedule || "--")}</td>
             <td>${escapeHtml(item.detail || "--")}</td>
-            <td><code>${escapeHtml(item.command || item.raw || "--")}</code></td>
             <td>${renderManagementActions(item)}</td>
+            <td><code>${escapeHtml(item.command || item.raw || "--")}</code></td>
         </tr>
     `).join("");
 }
