@@ -26,6 +26,10 @@ class ServerTest {
         System.clearProperty("OPS_DISCORD_WEBHOOK_URL")
         System.clearProperty("OPS_TELEGRAM_BOT_TOKEN")
         System.clearProperty("OPS_TELEGRAM_CHAT_ID")
+        System.clearProperty("OPS_MANAGE_ENABLED")
+        System.clearProperty("OPS_ALLOWED_SYSTEMD_UNITS")
+        System.clearProperty("OPS_RESTART_ONLY_SYSTEMD_UNITS")
+        System.clearProperty("OPS_ALLOWED_DOCKER_CONTAINERS")
         tempDir = Files.createTempDirectory("ops-hub-test")
         System.setProperty("OPS_DB_PATH", tempDir!!.resolve("ops-hub.db").toString())
     }
@@ -37,6 +41,10 @@ class ServerTest {
         System.clearProperty("OPS_DISCORD_WEBHOOK_URL")
         System.clearProperty("OPS_TELEGRAM_BOT_TOKEN")
         System.clearProperty("OPS_TELEGRAM_CHAT_ID")
+        System.clearProperty("OPS_MANAGE_ENABLED")
+        System.clearProperty("OPS_ALLOWED_SYSTEMD_UNITS")
+        System.clearProperty("OPS_RESTART_ONLY_SYSTEMD_UNITS")
+        System.clearProperty("OPS_ALLOWED_DOCKER_CONTAINERS")
         tempDir?.let { dir ->
             Files.walk(dir).use { paths ->
                 paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
@@ -137,6 +145,91 @@ class ServerTest {
         assertTrue(commands.any { it.contains("/usr/local/bin/system-backup") })
         assertTrue(commands.any { it.contains("/srv/app/heartbeat") })
         assertTrue(snapshot.problems.any { it.source == "inventory:systemd-service:backup.service" })
+    }
+
+    @Test
+    fun `management service only runs allowed actions and records events`() = runBlocking {
+        val database = OpsDatabase(tempDir!!.resolve("management.db"))
+        val commands = mutableListOf<List<String>>()
+        val service = ManagementService(
+            config = ManagementConfig(
+                enabled = true,
+                allowedSystemdUnits = listOf("demo.service", "personal-ops-hub.service"),
+                restartOnlySystemdUnits = setOf("personal-ops-hub.service"),
+                allowedDockerContainers = listOf("web"),
+            ),
+            database = database,
+        ) { command, _ ->
+            commands += command
+            CommandOutput(true, 0, "ok")
+        }
+
+        val response = service.runAction(
+            ManagementActionRequest(ManagementTargetType.SYSTEMD_UNIT, "demo", ManagementAction.RESTART),
+        )
+
+        assertTrue(response.success)
+        assertEquals(listOf("systemctl", "restart", "demo.service"), commands.single())
+        assertContains(database.recentEvents(query = "demo.service").single().message, "succeeded")
+        assertFailsWith<IllegalArgumentException> {
+            runBlocking {
+                service.runAction(
+                    ManagementActionRequest(ManagementTargetType.SYSTEMD_UNIT, "personal-ops-hub", ManagementAction.STOP),
+                )
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            runBlocking {
+                service.runAction(
+                    ManagementActionRequest(ManagementTargetType.DOCKER_CONTAINER, "postgres", ManagementAction.RESTART),
+                )
+            }
+        }
+        Unit
+    }
+
+    @Test
+    fun `management inventory exposes actions only for configured targets`() = runBlocking {
+        val database = OpsDatabase(tempDir!!.resolve("management-inventory.db"))
+        val service = ManagementService(
+            config = ManagementConfig(
+                enabled = true,
+                allowedSystemdUnits = listOf("demo.service", "personal-ops-hub.service"),
+                restartOnlySystemdUnits = setOf("personal-ops-hub.service"),
+                allowedDockerContainers = listOf("web"),
+            ),
+            database = database,
+        ) { command, _ ->
+            when (command) {
+                listOf(
+                    "systemctl",
+                    "show",
+                    "demo.service",
+                    "--property=LoadState,ActiveState,SubState,Description",
+                    "--value",
+                    "--no-pager",
+                ) -> CommandOutput(true, 0, "loaded\nactive\nrunning\nDemo service")
+                listOf(
+                    "systemctl",
+                    "show",
+                    "personal-ops-hub.service",
+                    "--property=LoadState,ActiveState,SubState,Description",
+                    "--value",
+                    "--no-pager",
+                ) -> CommandOutput(true, 0, "loaded\nactive\nrunning\nPersonal Ops Hub")
+                listOf("docker", "inspect", "--format", "{{.Name}}\t{{.State.Status}}\t{{.Config.Image}}", "web") ->
+                    CommandOutput(true, 0, "/web\trunning\tnginx:latest")
+                else -> CommandOutput(false, null, "unexpected command: ${command.joinToString(" ")}")
+            }
+        }
+
+        val sections = service.collectSections()
+        val systemdItems = sections.single { it.key == "MANAGED_SYSTEMD_UNITS" }.items
+        val dockerItems = sections.single { it.key == "MANAGED_DOCKER_CONTAINERS" }.items
+
+        assertEquals(listOf(ManagementAction.RESTART, ManagementAction.STOP), systemdItems.single { it.name == "demo.service" }.actions)
+        assertEquals(listOf(ManagementAction.RESTART), systemdItems.single { it.name == "personal-ops-hub.service" }.actions)
+        assertEquals(listOf(ManagementAction.RESTART, ManagementAction.STOP), dockerItems.single().actions)
     }
 
     @Test

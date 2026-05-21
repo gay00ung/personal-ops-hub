@@ -59,6 +59,7 @@ const translations = {
         inventoryColumnSchedule: "Schedule",
         inventoryColumnDetail: "Detail",
         inventoryColumnCommand: "Command",
+        inventoryColumnActions: "Actions",
         inventorySectionUSER_CRONTAB: "User crontab",
         inventorySectionSYSTEM_CRONTAB: "System crontab",
         inventorySectionCRON_D: "Cron drop-ins",
@@ -69,6 +70,15 @@ const translations = {
         inventorySectionRUNNING_SERVICES: "Running services",
         inventorySectionDOCKER_CONTAINERS: "Docker containers",
         inventorySectionLISTENING_PORTS: "Listening ports",
+        inventorySectionMANAGED_SYSTEMD_UNITS: "Managed systemd units",
+        inventorySectionMANAGED_DOCKER_CONTAINERS: "Managed Docker containers",
+        manageActionSTART: "Start",
+        manageActionSTOP: "Stop",
+        manageActionRESTART: "Restart",
+        managementRunning: "Running {action} on {name}...",
+        managementSucceeded: "{action} completed for {name}",
+        managementFailed: "{action} failed for {name}",
+        confirmStop: "Stop {name}?",
         recentEvents: "Recent Events",
         recentEventsDesc: "Incidents, recoveries, reports, deploys, and backup results.",
         eventSearchLabel: "Search",
@@ -169,6 +179,7 @@ const translations = {
         inventoryColumnSchedule: "스케줄",
         inventoryColumnDetail: "상세",
         inventoryColumnCommand: "명령",
+        inventoryColumnActions: "작업",
         inventorySectionUSER_CRONTAB: "사용자 crontab",
         inventorySectionSYSTEM_CRONTAB: "시스템 crontab",
         inventorySectionCRON_D: "cron.d 작업",
@@ -179,6 +190,15 @@ const translations = {
         inventorySectionRUNNING_SERVICES: "실행 중인 서비스",
         inventorySectionDOCKER_CONTAINERS: "Docker 컨테이너",
         inventorySectionLISTENING_PORTS: "열린 포트",
+        inventorySectionMANAGED_SYSTEMD_UNITS: "관리 허용 systemd 유닛",
+        inventorySectionMANAGED_DOCKER_CONTAINERS: "관리 허용 Docker 컨테이너",
+        manageActionSTART: "시작",
+        manageActionSTOP: "중지",
+        manageActionRESTART: "재시작",
+        managementRunning: "{name}에 {action} 실행 중...",
+        managementSucceeded: "{name} {action} 완료",
+        managementFailed: "{name} {action} 실패",
+        confirmStop: "{name}을(를) 중지할까요?",
         recentEvents: "최근 이벤트",
         recentEventsDesc: "장애, 복구, 리포트, 배포, 백업 결과입니다.",
         eventSearchLabel: "검색",
@@ -266,6 +286,7 @@ const els = {
     rssFeeds: document.getElementById("rssFeeds"),
     pageWatches: document.getElementById("pageWatches"),
     inventoryUpdated: document.getElementById("inventoryUpdated"),
+    inventoryActionStatus: document.getElementById("inventoryActionStatus"),
     inventoryProblems: document.getElementById("inventoryProblems"),
     inventorySections: document.getElementById("inventorySections"),
     refreshInventoryButton: document.getElementById("refreshInventoryButton"),
@@ -622,7 +643,7 @@ function renderInventorySection(section) {
     const state = section.available ? `${section.items.length}` : t("inventoryUnavailable");
     const rows = section.available
         ? renderInventoryRows(section.items)
-        : `<tr><td colspan="5" class="empty">${escapeHtml(section.message || t("inventoryUnavailable"))}</td></tr>`;
+        : `<tr><td colspan="6" class="empty">${escapeHtml(section.message || t("inventoryUnavailable"))}</td></tr>`;
 
     return `
         <article class="inventory-section">
@@ -642,6 +663,7 @@ function renderInventorySection(section) {
                         <th>${escapeHtml(t("inventoryColumnSchedule"))}</th>
                         <th>${escapeHtml(t("inventoryColumnDetail"))}</th>
                         <th>${escapeHtml(t("inventoryColumnCommand"))}</th>
+                        <th>${escapeHtml(t("inventoryColumnActions"))}</th>
                     </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -653,7 +675,7 @@ function renderInventorySection(section) {
 
 function renderInventoryRows(items) {
     if (!items || items.length === 0) {
-        return `<tr><td colspan="5" class="empty">${escapeHtml(t("inventoryEmpty"))}</td></tr>`;
+        return `<tr><td colspan="6" class="empty">${escapeHtml(t("inventoryEmpty"))}</td></tr>`;
     }
     return items.map((item) => `
         <tr>
@@ -665,8 +687,33 @@ function renderInventoryRows(items) {
             <td>${escapeHtml(item.schedule || "--")}</td>
             <td>${escapeHtml(item.detail || "--")}</td>
             <td><code>${escapeHtml(item.command || item.raw || "--")}</code></td>
+            <td>${renderManagementActions(item)}</td>
         </tr>
     `).join("");
+}
+
+function renderManagementActions(item) {
+    const targetType = managementTargetType(item.kind);
+    if (!targetType || !item.actions || item.actions.length === 0) return "--";
+    return `
+        <div class="management-actions">
+            ${item.actions.map((action) => `
+                <button
+                    type="button"
+                    class="mini-action ${action === "STOP" ? "danger" : ""}"
+                    data-manage-target-type="${escapeHtml(targetType)}"
+                    data-manage-name="${escapeHtml(item.name)}"
+                    data-manage-action="${escapeHtml(action)}"
+                >${escapeHtml(t(`manageAction${action}`))}</button>
+            `).join("")}
+        </div>
+    `;
+}
+
+function managementTargetType(kind) {
+    if (kind === "managed-systemd-unit") return "SYSTEMD_UNIT";
+    if (kind === "managed-docker-container") return "DOCKER_CONTAINER";
+    return null;
 }
 
 function localizeHealthMessage(message) {
@@ -706,6 +753,14 @@ function localizeEventMessage(message) {
     const recoveredMatch = message.match(/^(.+) recovered$/);
     if (recoveredMatch) return `${recoveredMatch[1]} 복구됨`;
 
+    const managementMatch = message.match(/^(systemd unit|docker container) (start|stop|restart) (.+) (succeeded|failed)$/);
+    if (managementMatch) {
+        const target = managementMatch[1] === "systemd unit" ? "systemd 유닛" : "Docker 컨테이너";
+        const action = { start: "시작", stop: "중지", restart: "재시작" }[managementMatch[2]];
+        const result = managementMatch[4] === "succeeded" ? "성공" : "실패";
+        return `${target} ${managementMatch[3]} ${action} ${result}`;
+    }
+
     const exact = {
         "application started": "앱 시작됨",
         "application stopped": "앱 중지됨",
@@ -726,6 +781,8 @@ function localizeSource(source) {
         .replace(/^metric:disk:/, "지표:디스크:")
         .replace(/^service:/, "서비스:")
         .replace(/^backup:/, "백업:")
+        .replace(/^management:systemd_unit:/, "관리:systemd:")
+        .replace(/^management:docker_container:/, "관리:Docker:")
         .replace(/^daily-report$/, "일일 리포트")
         .replace(/^alert-test$/, "알림 테스트")
         .replace(/^ops-hub$/, "Ops Hub");
@@ -901,6 +958,43 @@ async function refreshInventory() {
     }
 }
 
+async function runManagementAction(button) {
+    const targetType = button.dataset.manageTargetType;
+    const name = button.dataset.manageName;
+    const action = button.dataset.manageAction;
+    const actionLabel = t(`manageAction${action}`);
+
+    if (action === "STOP" && !window.confirm(t("confirmStop", { name }))) return;
+
+    setInventoryActionStatus("running", t("managementRunning", { action: actionLabel, name }));
+    els.inventorySections.querySelectorAll("[data-manage-action]").forEach((item) => {
+        item.disabled = true;
+    });
+
+    try {
+        const result = await getJson("/api/manage/actions", {
+            method: "POST",
+            body: JSON.stringify({ targetType, name, action }),
+        });
+        setInventoryActionStatus(
+            result.success ? "success" : "error",
+            t(result.success ? "managementSucceeded" : "managementFailed", { action: actionLabel, name }),
+        );
+        await refreshInventory();
+        await refreshSummary();
+    } catch (error) {
+        setInventoryActionStatus("error", t("managementFailed", { action: actionLabel, name }));
+        els.inventorySections.querySelectorAll("[data-manage-action]").forEach((item) => {
+            item.disabled = false;
+        });
+    }
+}
+
+function setInventoryActionStatus(kind, message) {
+    els.inventoryActionStatus.textContent = message;
+    els.inventoryActionStatus.className = `inventory-action-status ${kind}`;
+}
+
 function connectSocket() {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(`${protocol}://${window.location.host}/ws/metrics`);
@@ -979,6 +1073,12 @@ els.testAlertButton.addEventListener("click", async () => {
 
 els.refreshInventoryButton.addEventListener("click", () => {
     refreshInventory().catch(console.error);
+});
+
+els.inventorySections.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-manage-action]");
+    if (!button) return;
+    runManagementAction(button).catch(console.error);
 });
 
 bindNavigation();

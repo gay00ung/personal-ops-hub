@@ -110,6 +110,19 @@ fun Application.configureRouting() {
                     call.respond(hub.inventorySnapshot())
                 }
 
+                post("/manage/actions") {
+                    if (!call.requireAdminToken(hub)) return@post
+                    val request = call.receive<ManagementActionRequest>()
+                    val response = runCatching { hub.runManagementAction(request) }
+                        .getOrElse { error ->
+                            return@post call.respond(
+                                HttpStatusCode.BadRequest,
+                                ErrorResponse("bad_request", error.message ?: "invalid management action"),
+                            )
+                        }
+                    call.respond(response)
+                }
+
                 post("/alerts/test") {
                     if (!call.requireAdminToken(hub)) return@post
                     val request = runCatching { call.receive<AlertTestRequest>() }.getOrDefault(AlertTestRequest())

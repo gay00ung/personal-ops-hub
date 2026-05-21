@@ -33,6 +33,19 @@ enum class CheckKind {
 }
 
 @Serializable
+enum class ManagementTargetType {
+    SYSTEMD_UNIT,
+    DOCKER_CONTAINER,
+}
+
+@Serializable
+enum class ManagementAction {
+    START,
+    STOP,
+    RESTART,
+}
+
+@Serializable
 data class ApiHealthResponse(
     val status: HealthStatus,
     val app: String,
@@ -163,6 +176,7 @@ data class InventoryItem(
     val command: String? = null,
     val detail: String? = null,
     val raw: String? = null,
+    val actions: List<ManagementAction> = emptyList(),
 )
 
 @Serializable
@@ -189,6 +203,24 @@ data class BackupReportRequest(
 @Serializable
 data class AlertTestRequest(
     val message: String = "Personal Ops Hub test alert",
+)
+
+@Serializable
+data class ManagementActionRequest(
+    val targetType: ManagementTargetType,
+    val name: String,
+    val action: ManagementAction,
+)
+
+@Serializable
+data class ManagementActionResponse(
+    val targetType: ManagementTargetType,
+    val name: String,
+    val action: ManagementAction,
+    val success: Boolean,
+    val exitCode: Int?,
+    val output: String,
+    val event: EventRecord,
 )
 
 @Serializable

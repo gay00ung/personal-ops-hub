@@ -14,6 +14,7 @@ data class AppConfig(
     val alerts: AlertConfig,
     val checks: ChecksConfig,
     val automations: AutomationConfig,
+    val management: ManagementConfig,
 )
 
 data class AuthConfig(
@@ -70,6 +71,13 @@ data class AutomationConfig(
     val pageWatches: List<NamedUrlConfig>,
 )
 
+data class ManagementConfig(
+    val enabled: Boolean,
+    val allowedSystemdUnits: List<String>,
+    val restartOnlySystemdUnits: Set<String>,
+    val allowedDockerContainers: List<String>,
+)
+
 data class NamedUrlConfig(
     val name: String,
     val url: String,
@@ -119,6 +127,19 @@ fun loadAppConfig(env: Map<String, String> = System.getenv()): AppConfig {
             rssFeeds = parseNamedUrls(env["OPS_RSS_FEEDS"]),
             pageWatches = parseNamedUrls(env["OPS_PAGE_WATCHES"]),
         ),
+        management = ManagementConfig(
+            enabled = parseBoolean(setting(env, "OPS_MANAGE_ENABLED"), default = false),
+            allowedSystemdUnits = splitList(setting(env, "OPS_ALLOWED_SYSTEMD_UNITS"))
+                .map(::normalizeSystemdUnitName)
+                .distinct(),
+            restartOnlySystemdUnits = (
+                splitList(setting(env, "OPS_RESTART_ONLY_SYSTEMD_UNITS")) +
+                    (setting(env, "OPS_SELF_SYSTEMD_UNIT") ?: "personal-ops-hub.service")
+                )
+                .map(::normalizeSystemdUnitName)
+                .toSet(),
+            allowedDockerContainers = splitList(setting(env, "OPS_ALLOWED_DOCKER_CONTAINERS")).distinct(),
+        ),
     )
 }
 
@@ -157,4 +178,18 @@ private fun parseBackupMarkers(value: String?): List<BackupMarkerConfig> =
         val path = target.substringBeforeLast(':', missingDelimiterValue = target).trim()
         val maxAge = target.substringAfterLast(':', missingDelimiterValue = "1440").toLongOrNull() ?: 1440
         if (name.isBlank() || path.isBlank()) null else BackupMarkerConfig(name, Path(path), maxAge)
+    }
+
+fun normalizeSystemdUnitName(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return trimmed
+    return if (trimmed.endsWith(".service") || trimmed.endsWith(".timer")) trimmed else "$trimmed.service"
+}
+
+private fun parseBoolean(value: String?, default: Boolean): Boolean =
+    when (value?.trim()?.lowercase()) {
+        null, "" -> default
+        "1", "true", "yes", "y", "on" -> true
+        "0", "false", "no", "n", "off" -> false
+        else -> default
     }

@@ -25,6 +25,7 @@ class OpsHub(val config: AppConfig) {
     val notifier = Notifier(config.alerts)
     val serviceMonitor = ServiceMonitor(config)
     val inventoryCollector = OpsInventoryCollector()
+    val managementService = ManagementService(config.management, database)
     val automationRunner = AutomationRunner(config, database, metricsCollector, notifier)
 
     private val started = AtomicBoolean(false)
@@ -124,10 +125,15 @@ class OpsHub(val config: AppConfig) {
     }
 
     suspend fun inventorySnapshot(): OpsInventorySnapshot {
-        val snapshot = inventoryCollector.collect()
+        val raw = inventoryCollector.collect()
+        val managedSections = managementService.collectSections()
+        val snapshot = raw.copy(sections = raw.sections + managedSections)
         recordInventoryProblems(snapshot.problems)
         return snapshot
     }
+
+    suspend fun runManagementAction(request: ManagementActionRequest): ManagementActionResponse =
+        managementService.runAction(request)
 
     private suspend fun evaluateServiceTransition(result: ServiceCheckResult) {
         val key = "service:${result.kind}:${result.name}"

@@ -8,6 +8,7 @@ A personal server monitoring and automation hub built with Ktor.
 - Stores recent metrics in SQLite for a one-hour dashboard graph.
 - Checks HTTP endpoints, TCP ports, Docker containers, and backup markers.
 - Shows a read-only server inventory for cron, systemd timers, services, Docker, and listening ports.
+- Can start, stop, or restart explicitly allowed systemd units and Docker containers from the dashboard.
 - Records incident, recovery, deploy, backup, RSS, page-watch, and report events.
 - Streams live metrics over WebSocket at `/ws/metrics`.
 - Sends alerts to Discord and/or Telegram when configured.
@@ -46,6 +47,19 @@ sudo scripts/update-server.sh
 
 The updater runs `git pull --ff-only`, rebuilds the distribution, restarts `personal-ops-hub`, and checks `http://127.0.0.1:8080/api/health`.
 
+## Safe service actions
+
+Dashboard management actions are disabled by default. Enable them only after dashboard auth is configured:
+
+```bash
+OPS_MANAGE_ENABLED=true
+OPS_ALLOWED_SYSTEMD_UNITS=personal-ops-hub,caddy,nginx
+OPS_RESTART_ONLY_SYSTEMD_UNITS=personal-ops-hub.service
+OPS_ALLOWED_DOCKER_CONTAINERS=
+```
+
+Only targets listed in `OPS_ALLOWED_SYSTEMD_UNITS` or `OPS_ALLOWED_DOCKER_CONTAINERS` get action buttons. `OPS_RESTART_ONLY_SYSTEMD_UNITS` can be used for units that should never be stopped from the UI. The generated systemd install env file defaults the app's own unit to restart-only.
+
 ## Docker run
 
 ```bash
@@ -70,6 +84,10 @@ Use Caddy with `Caddyfile.example` as the public HTTPS reverse proxy.
 - `OPS_PAGE_WATCHES`: `notice=https://example.com/notice`.
 - `OPS_GITHUB_WEBHOOK_SECRET`: GitHub webhook secret.
 - `OPS_DEPLOY_COMMAND`: command to run after a verified GitHub webhook.
+- `OPS_MANAGE_ENABLED`: enables dashboard start/stop/restart actions.
+- `OPS_ALLOWED_SYSTEMD_UNITS`: comma-separated allowlist for managed systemd units.
+- `OPS_RESTART_ONLY_SYSTEMD_UNITS`: systemd units that can be restarted but not stopped from the UI.
+- `OPS_ALLOWED_DOCKER_CONTAINERS`: comma-separated allowlist for managed Docker containers.
 
 ## Alerts
 
@@ -97,6 +115,7 @@ Alerts are sent for action-required events such as service failures, resource th
 - `GET /api/services`
 - `POST /api/services/run`
 - `GET /api/inventory`
+- `POST /api/manage/actions`
 - `GET /api/events`
 - `GET /api/automation`
 - `POST /api/alerts/test`
