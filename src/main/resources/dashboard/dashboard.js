@@ -1,9 +1,14 @@
 const LOCALE_KEY = "personal-ops-hub-locale";
+const THEME_KEY = "personal-ops-hub-theme";
 
 const translations = {
     en: {
         brandSubtitle: "personal server",
         languageLabel: "Language",
+        themeLabel: "Theme",
+        themeSystem: "System",
+        themeLight: "Light",
+        themeDark: "Dark",
         navOverview: "Overview",
         navServices: "Services",
         navJobs: "Jobs",
@@ -124,6 +129,10 @@ const translations = {
     ko: {
         brandSubtitle: "개인 서버",
         languageLabel: "언어",
+        themeLabel: "테마",
+        themeSystem: "시스템",
+        themeLight: "라이트",
+        themeDark: "다크",
         navOverview: "개요",
         navServices: "서비스",
         navJobs: "작업",
@@ -247,6 +256,7 @@ const state = {
     samples: [],
     maxSamples: 240,
     locale: getInitialLocale(),
+    theme: getInitialTheme(),
     latestSummary: null,
     latestSnapshot: null,
     latestInventory: null,
@@ -294,6 +304,8 @@ const els = {
     testAlertButton: document.getElementById("testAlertButton"),
     languageToggle: document.querySelector(".language-toggle"),
     localeButtons: document.querySelectorAll("[data-locale]"),
+    themeToggle: document.querySelector(".theme-toggle"),
+    themeButtons: document.querySelectorAll("[data-theme-choice]"),
     navLinks: document.querySelectorAll(".nav a[href^='#']"),
 };
 
@@ -301,6 +313,11 @@ function getInitialLocale() {
     const saved = localStorage.getItem(LOCALE_KEY);
     if (saved === "ko" || saved === "en") return saved;
     return navigator.language?.toLowerCase().startsWith("ko") ? "ko" : "en";
+}
+
+function getInitialTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    return ["system", "light", "dark"].includes(saved) ? saved : "system";
 }
 
 function t(key, vars = {}) {
@@ -314,6 +331,26 @@ function setLocale(locale) {
     state.locale = locale;
     localStorage.setItem(LOCALE_KEY, locale);
     applyLocale();
+}
+
+function setTheme(theme) {
+    state.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+    applyTheme();
+}
+
+function applyTheme() {
+    document.documentElement.dataset.theme = state.theme;
+    els.themeButtons.forEach((button) => {
+        const active = button.dataset.themeChoice === state.theme;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+    });
+    drawChart();
+}
+
+function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 function setActiveNav(sectionId) {
@@ -383,11 +420,13 @@ function applyLocale() {
         node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
     });
     els.languageToggle.setAttribute("aria-label", t("languageLabel"));
+    els.themeToggle.setAttribute("aria-label", t("themeLabel"));
     els.localeButtons.forEach((button) => {
         const active = button.dataset.locale === state.locale;
         button.classList.toggle("active", active);
         button.setAttribute("aria-pressed", String(active));
     });
+    applyTheme();
     setSocketState(state.latestSocketState);
     if (state.latestSummary) renderSummary(state.latestSummary, false);
     else if (state.latestSnapshot) renderSnapshot(state.latestSnapshot, false);
@@ -641,12 +680,13 @@ function renderInventory(inventory, remember = true) {
 function renderInventorySection(section) {
     const title = t(`inventorySection${section.key}`) || section.title;
     const state = section.available ? `${section.items.length}` : t("inventoryUnavailable");
+    const sectionClass = `inventory-section-${String(section.key || "").toLowerCase().replaceAll("_", "-")}`;
     const rows = section.available
         ? renderInventoryRows(section.items)
         : `<tr><td colspan="6" class="empty">${escapeHtml(section.message || t("inventoryUnavailable"))}</td></tr>`;
 
     return `
-        <article class="inventory-section">
+        <article class="inventory-section ${escapeHtml(sectionClass)}">
             <div class="inventory-section-head">
                 <div>
                     <h3>${escapeHtml(title)}</h3>
@@ -803,11 +843,15 @@ function drawChart() {
     const width = canvas.width;
     const height = canvas.height;
     const pad = 28;
+    const chartBg = cssVar("--chart-bg") || "#ffffff";
+    const chartGrid = cssVar("--chart-grid") || "#eef2f7";
+    const cpuColor = cssVar("--chart-cpu") || "#2563eb";
+    const memoryColor = cssVar("--chart-memory") || "#16a34a";
     ctx.clearRect(0, 0, width, height);
 
-    ctx.fillStyle = "#fbfcff";
+    ctx.fillStyle = chartBg;
     ctx.fillRect(0, 0, width, height);
-    ctx.strokeStyle = "#e5eaf2";
+    ctx.strokeStyle = chartGrid;
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i += 1) {
         const y = pad + ((height - pad * 2) * i) / 4;
@@ -817,8 +861,8 @@ function drawChart() {
         ctx.stroke();
     }
 
-    drawLine(ctx, state.samples.map((sample) => sample.cpu.systemPercent), "#2563eb", width, height, pad);
-    drawLine(ctx, state.samples.map((sample) => sample.memory.usedPercent), "#16a34a", width, height, pad);
+    drawLine(ctx, state.samples.map((sample) => sample.cpu.systemPercent), cpuColor, width, height, pad);
+    drawLine(ctx, state.samples.map((sample) => sample.memory.usedPercent), memoryColor, width, height, pad);
 }
 
 function drawLine(ctx, values, color, width, height, pad) {
@@ -1018,6 +1062,14 @@ function connectSocket() {
 
 els.localeButtons.forEach((button) => {
     button.addEventListener("click", () => setLocale(button.dataset.locale));
+});
+
+els.themeButtons.forEach((button) => {
+    button.addEventListener("click", () => setTheme(button.dataset.themeChoice));
+});
+
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (state.theme === "system") drawChart();
 });
 
 els.eventSeverityButtons.forEach((button) => {

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="system">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -33,6 +33,11 @@
                     <p id="hostLine" data-i18n="waitingTelemetry">Waiting for server telemetry...</p>
                 </div>
                 <div class="topbar-actions">
+                    <div class="theme-toggle" role="group" aria-label="Theme">
+                        <button type="button" data-theme-choice="system" data-i18n="themeSystem">System</button>
+                        <button type="button" data-theme-choice="light" data-i18n="themeLight">Light</button>
+                        <button type="button" data-theme-choice="dark" data-i18n="themeDark">Dark</button>
+                    </div>
                     <div class="language-toggle" role="group" aria-label="Language">
                         <button id="localeKoButton" type="button" data-locale="ko">KR</button>
                         <span aria-hidden="true">|</span>
