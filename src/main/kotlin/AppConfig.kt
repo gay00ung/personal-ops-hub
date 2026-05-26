@@ -9,6 +9,7 @@ data class AppConfig(
     val port: Int,
     val databasePath: Path,
     val retentionHours: Long,
+    val eventRetentionDays: Long,
     val collectionIntervalSeconds: Long,
     val auth: AuthConfig,
     val alerts: AlertConfig,
@@ -95,6 +96,7 @@ fun loadAppConfig(env: Map<String, String> = System.getenv()): AppConfig {
         port = port,
         databasePath = Path(setting(env, "OPS_DB_PATH").orEmpty().ifBlank { "data/ops-hub.db" }),
         retentionHours = env["OPS_RETENTION_HOURS"]?.toLongOrNull()?.coerceAtLeast(1) ?: 24,
+        eventRetentionDays = env["OPS_EVENT_RETENTION_DAYS"]?.toLongOrNull()?.coerceAtLeast(0) ?: 90,
         collectionIntervalSeconds = env["OPS_COLLECTION_INTERVAL_SECONDS"]?.toLongOrNull()?.coerceAtLeast(5) ?: 30,
         auth = AuthConfig(
             username = env["OPS_ADMIN_USER"].orEmpty().ifBlank { "admin" },

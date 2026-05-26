@@ -7,6 +7,7 @@ import java.sql.DriverManager
 import java.sql.ResultSet
 import java.sql.Statement
 import kotlin.io.path.absolutePathString
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 
 class OpsDatabase(private val path: Path) {
@@ -56,6 +57,28 @@ class OpsDatabase(private val path: Path) {
                 }
             }
         }
+
+    @Synchronized
+    fun pruneEvents(retentionDays: Long, now: Long = System.currentTimeMillis()): Int {
+        if (retentionDays <= 0) return 0
+        val cutoff = now - retentionDays.days.inWholeMilliseconds
+        return connection().use { conn ->
+            conn.prepareStatement(
+                """
+                delete from events
+                where timestamp < ?
+                    and (
+                        action_required = 0
+                        or state = ?
+                    )
+                """.trimIndent(),
+            ).use { stmt ->
+                stmt.setLong(1, cutoff)
+                stmt.setString(2, EventState.RESOLVED.name)
+                stmt.executeUpdate()
+            }
+        }
+    }
 
     @Synchronized
     fun upsertServiceCheck(result: ServiceCheckResult) {

@@ -79,6 +79,8 @@ Use Caddy with `Caddyfile.example` as the public HTTPS reverse proxy.
 - `OPS_ADMIN_PASSWORD`: enables dashboard Basic Auth.
 - `OPS_ADMIN_TOKEN`: protects mutating endpoints such as manual checks and backup reports.
 - `PORT`: HTTP port used by Ktor and by the default self health check.
+- `OPS_RETENTION_HOURS`: metric sample retention in hours. Defaults to `24`.
+- `OPS_EVENT_RETENTION_DAYS`: resolved/log event retention in days. Defaults to `90`; set `0` to disable pruning. Open and acknowledged action items are preserved.
 - `OPS_DISCORD_WEBHOOK_URL`: sends Discord alerts.
 - `OPS_TELEGRAM_BOT_TOKEN` and `OPS_TELEGRAM_CHAT_ID`: sends Telegram alerts.
 - `OPS_HTTP_CHECKS`: `name=https://example.com/health;blog=https://example.com`.

@@ -65,6 +65,7 @@ class OpsHub(val config: AppConfig) {
     suspend fun collectOnce(): SystemSnapshot {
         val snapshot = metricsCollector.collect()
         database.insertMetric(snapshot, config.retentionHours)
+        database.pruneEvents(config.eventRetentionDays, snapshot.timestamp)
         evaluateMetricThresholds(snapshot)
 
         val serviceResults = serviceMonitor.runAll()

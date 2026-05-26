@@ -111,6 +111,15 @@ class ServerTest {
     }
 
     @Test
+    fun `config reads event retention days`() {
+        val defaultConfig = loadAppConfig(emptyMap())
+        val disabledConfig = loadAppConfig(mapOf("OPS_EVENT_RETENTION_DAYS" to "0"))
+
+        assertEquals(90, defaultConfig.eventRetentionDays)
+        assertEquals(0, disabledConfig.eventRetentionDays)
+    }
+
+    @Test
     fun `inventory collector parses cron jobs and failed units`() = runBlocking {
         val etc = tempDir!!.resolve("etc")
         Files.createDirectories(etc.resolve("cron.d"))
@@ -204,6 +213,33 @@ class ServerTest {
         assertEquals("local", redactRemoteAddressForAudit("127.0.0.1"))
         assertEquals("local", redactRemoteAddressForAudit("::1"))
         assertEquals("2001:db8:85a3:...", redactRemoteAddressForAudit("2001:db8:85a3:0000:0000:8a2e:0370:7334"))
+    }
+
+    @Test
+    fun `event pruning keeps open action items`() {
+        val database = OpsDatabase(tempDir!!.resolve("event-retention.db"))
+        val now = 1_800_000_000_000L
+        val old = now - 31L * 24 * 60 * 60 * 1000
+        val recent = now - 1_000
+
+        database.insertEvent(EventSeverity.INFO, "log:old", "old log", timestamp = old)
+        database.insertEvent(EventSeverity.INFO, "log:recent", "recent log", timestamp = recent)
+        val resolved = database.insertEvent(EventSeverity.CRITICAL, "metric:resolved", "old resolved", timestamp = old)
+        val open = database.insertEvent(EventSeverity.CRITICAL, "metric:open", "old open", timestamp = old)
+        val acknowledged = database.insertEvent(EventSeverity.WARNING, "metric:ack", "old acknowledged", timestamp = old)
+        database.updateEventState(resolved.id, EventState.RESOLVED)
+        database.updateEventState(acknowledged.id, EventState.ACKNOWLEDGED)
+
+        val deleted = database.pruneEvents(retentionDays = 30, now = now)
+        val messages = database.recentEvents(limit = 10).map { it.message }
+
+        assertEquals(2, deleted)
+        assertFalse("old log" in messages)
+        assertFalse("old resolved" in messages)
+        assertTrue("recent log" in messages)
+        assertTrue("old open" in messages)
+        assertTrue("old acknowledged" in messages)
+        assertNotNull(database.updateEventState(open.id, EventState.RESOLVED))
     }
 
     @Test
