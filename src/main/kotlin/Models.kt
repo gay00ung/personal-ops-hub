@@ -46,6 +46,11 @@ enum class ManagementAction {
 }
 
 @Serializable
+enum class LogTargetType {
+    SYSTEMD_UNIT,
+}
+
+@Serializable
 data class ApiHealthResponse(
     val status: HealthStatus,
     val app: String,
@@ -177,6 +182,7 @@ data class InventoryItem(
     val detail: String? = null,
     val raw: String? = null,
     val actions: List<ManagementAction> = emptyList(),
+    val logs: List<LogTargetType> = emptyList(),
 )
 
 @Serializable
@@ -221,6 +227,17 @@ data class ManagementActionResponse(
     val exitCode: Int?,
     val output: String,
     val event: EventRecord,
+)
+
+@Serializable
+data class LogReadResponse(
+    val targetType: LogTargetType,
+    val name: String,
+    val lines: Int,
+    val success: Boolean,
+    val exitCode: Int?,
+    val output: String,
+    val timestamp: Long,
 )
 
 @Serializable

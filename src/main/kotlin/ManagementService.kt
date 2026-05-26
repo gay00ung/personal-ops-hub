@@ -1,14 +1,10 @@
 package net.lateinint
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
-
 class ManagementService(
     private val config: ManagementConfig,
     private val database: OpsDatabase,
     private val commandRunner: suspend (List<String>, Long) -> CommandOutput = { command, timeout ->
-        runManagedCommand(command, timeout)
+        runProcessCommand(command, timeout)
     },
 ) {
     suspend fun collectSections(visibleSections: List<InventorySection> = emptyList()): List<InventorySection> = buildList {
@@ -54,16 +50,6 @@ class ManagementService(
     }
 
     private suspend fun systemdSection(): InventorySection {
-        if (!config.enabled) {
-            return InventorySection(
-                key = "MANAGED_SYSTEMD_UNITS",
-                title = "Managed systemd units",
-                source = "OPS_ALLOWED_SYSTEMD_UNITS",
-                available = false,
-                message = "management disabled",
-            )
-        }
-
         val items = config.allowedSystemdUnits.map { unit ->
             val result = commandRunner(
                 listOf(
@@ -95,7 +81,7 @@ class ManagementService(
                 name = unit,
                 status = listOf(loadState, activeState, subState).joinToString("/"),
                 detail = description.ifBlank { result.output.ifBlank { "no status" } },
-                command = "systemctl start|stop|restart $unit",
+                command = if (config.enabled) "systemctl start|stop|restart $unit" else "systemctl show $unit",
                 actions = allowedSystemdActions(unit, loadState, activeState),
             )
         }
@@ -239,21 +225,3 @@ class ManagementService(
         private val dockerNameRegex = Regex("""[A-Za-z0-9][A-Za-z0-9_.-]*""")
     }
 }
-
-private suspend fun runManagedCommand(command: List<String>, timeoutSeconds: Long): CommandOutput =
-    withContext(Dispatchers.IO) {
-        runCatching {
-            val process = ProcessBuilder(command)
-                .redirectErrorStream(true)
-                .start()
-            val completed = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            val output = process.inputStream.bufferedReader().use { it.readText() }.trim().takeLast(8000)
-            if (!completed) {
-                process.destroyForcibly()
-                return@withContext CommandOutput(false, null, output.ifBlank { "timed out" })
-            }
-            CommandOutput(process.exitValue() == 0, process.exitValue(), output)
-        }.getOrElse { error ->
-            CommandOutput(false, null, error.message.orEmpty())
-        }
-    }

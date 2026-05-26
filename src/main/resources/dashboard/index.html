@@ -145,6 +145,16 @@
                 <div id="inventorySections" class="inventory-sections">
                     <p class="empty" data-i18n="inventoryLoading">Loading inventory...</p>
                 </div>
+                <aside id="logPanel" class="log-panel hidden" aria-live="polite">
+                    <div class="log-panel-head">
+                        <div>
+                            <h3 id="logTitle" data-i18n="logsTitle">Logs</h3>
+                            <p id="logMeta" data-i18n="logsEmpty">Select a log-enabled systemd unit.</p>
+                        </div>
+                        <button id="closeLogPanelButton" class="button compact secondary" type="button" data-i18n="closeLogs">Close</button>
+                    </div>
+                    <pre id="logOutput" data-i18n="logsEmpty">Select a log-enabled systemd unit.</pre>
+                </aside>
             </section>
 
             <section id="events" class="panel">

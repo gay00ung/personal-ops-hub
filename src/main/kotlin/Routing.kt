@@ -110,6 +110,19 @@ fun Application.configureRouting() {
                     call.respond(hub.inventorySnapshot())
                 }
 
+                get("/logs/systemd") {
+                    val unit = call.request.queryParameters["unit"].orEmpty()
+                    val lines = call.request.queryParameters["lines"]?.toIntOrNull() ?: 100
+                    val response = runCatching { hub.systemdLogs(unit, lines) }
+                        .getOrElse { error ->
+                            return@get call.respond(
+                                HttpStatusCode.BadRequest,
+                                ErrorResponse("bad_request", error.message ?: "invalid log request"),
+                            )
+                        }
+                    call.respond(response)
+                }
+
                 post("/manage/actions") {
                     if (!call.requireAdminToken(hub)) return@post
                     val request = call.receive<ManagementActionRequest>()

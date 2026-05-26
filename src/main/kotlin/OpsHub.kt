@@ -26,6 +26,7 @@ class OpsHub(val config: AppConfig) {
     val serviceMonitor = ServiceMonitor(config)
     val inventoryCollector = OpsInventoryCollector()
     val managementService = ManagementService(config.management, database)
+    val logService = LogService(config.management)
     val automationRunner = AutomationRunner(config, database, metricsCollector, notifier)
 
     private val started = AtomicBoolean(false)
@@ -128,13 +129,16 @@ class OpsHub(val config: AppConfig) {
         val raw = inventoryCollector.collect()
         val decoratedSections = raw.sections.map(managementService::decorateSection)
         val managedSections = managementService.collectSections(decoratedSections)
-        val snapshot = raw.copy(sections = decoratedSections + managedSections)
+        val snapshot = raw.copy(sections = (decoratedSections + managedSections).map(logService::decorateSection))
         recordInventoryProblems(snapshot.problems)
         return snapshot
     }
 
     suspend fun runManagementAction(request: ManagementActionRequest): ManagementActionResponse =
         managementService.runAction(request)
+
+    suspend fun systemdLogs(unit: String, lines: Int): LogReadResponse =
+        logService.systemdLogs(unit, lines)
 
     private suspend fun evaluateServiceTransition(result: ServiceCheckResult) {
         val key = "service:${result.kind}:${result.name}"

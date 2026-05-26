@@ -84,6 +84,13 @@ const translations = {
         managementSucceeded: "{action} completed for {name}",
         managementFailed: "{action} failed for {name}",
         confirmStop: "Stop {name}?",
+        viewLogs: "Logs",
+        logsTitle: "Logs",
+        logsEmpty: "Select a log-enabled systemd unit.",
+        logsLoading: "Loading logs for {name}...",
+        logsUpdated: "Updated {time} · last {lines} lines",
+        logsFailed: "Failed to load logs · exit {exitCode}",
+        closeLogs: "Close",
         recentEvents: "Recent Events",
         recentEventsDesc: "Incidents, recoveries, reports, deploys, and backup results.",
         eventSearchLabel: "Search",
@@ -208,6 +215,13 @@ const translations = {
         managementSucceeded: "{name} {action} 완료",
         managementFailed: "{name} {action} 실패",
         confirmStop: "{name}을(를) 중지할까요?",
+        viewLogs: "로그",
+        logsTitle: "로그",
+        logsEmpty: "로그를 볼 수 있는 systemd 유닛을 선택하세요.",
+        logsLoading: "{name} 로그 불러오는 중...",
+        logsUpdated: "{time} 갱신 · 최근 {lines}줄",
+        logsFailed: "로그 불러오기 실패 · 종료 코드 {exitCode}",
+        closeLogs: "닫기",
         recentEvents: "최근 이벤트",
         recentEventsDesc: "장애, 복구, 리포트, 배포, 백업 결과입니다.",
         eventSearchLabel: "검색",
@@ -260,6 +274,7 @@ const state = {
     latestSummary: null,
     latestSnapshot: null,
     latestInventory: null,
+    latestLog: null,
     latestSocketState: "websocket",
     navLockUntil: 0,
     events: [],
@@ -299,6 +314,11 @@ const els = {
     inventoryActionStatus: document.getElementById("inventoryActionStatus"),
     inventoryProblems: document.getElementById("inventoryProblems"),
     inventorySections: document.getElementById("inventorySections"),
+    logPanel: document.getElementById("logPanel"),
+    logTitle: document.getElementById("logTitle"),
+    logMeta: document.getElementById("logMeta"),
+    logOutput: document.getElementById("logOutput"),
+    closeLogPanelButton: document.getElementById("closeLogPanelButton"),
     refreshInventoryButton: document.getElementById("refreshInventoryButton"),
     runChecksButton: document.getElementById("runChecksButton"),
     testAlertButton: document.getElementById("testAlertButton"),
@@ -431,6 +451,7 @@ function applyLocale() {
     if (state.latestSummary) renderSummary(state.latestSummary, false);
     else if (state.latestSnapshot) renderSnapshot(state.latestSnapshot, false);
     if (state.latestInventory) renderInventory(state.latestInventory, false);
+    if (state.latestLog) renderLogResult(state.latestLog);
     syncEventFilterButtons();
     renderEventDetail();
     drawChart();
@@ -734,18 +755,30 @@ function renderInventoryRows(items) {
 
 function renderManagementActions(item) {
     const targetType = managementTargetType(item.kind);
-    if (!targetType || !item.actions || item.actions.length === 0) return "--";
+    const managementButtons = targetType && item.actions?.length
+        ? item.actions.map((action) => `
+            <button
+                type="button"
+                class="mini-action ${action === "STOP" ? "danger" : ""}"
+                data-manage-target-type="${escapeHtml(targetType)}"
+                data-manage-name="${escapeHtml(item.name)}"
+                data-manage-action="${escapeHtml(action)}"
+            >${escapeHtml(t(`manageAction${action}`))}</button>
+        `)
+        : [];
+    const logButtons = (item.logs || []).map((logTargetType) => `
+        <button
+            type="button"
+            class="mini-action"
+            data-log-target-type="${escapeHtml(logTargetType)}"
+            data-log-name="${escapeHtml(item.name)}"
+        >${escapeHtml(t("viewLogs"))}</button>
+    `);
+
+    if (managementButtons.length === 0 && logButtons.length === 0) return "--";
     return `
         <div class="management-actions">
-            ${item.actions.map((action) => `
-                <button
-                    type="button"
-                    class="mini-action ${action === "STOP" ? "danger" : ""}"
-                    data-manage-target-type="${escapeHtml(targetType)}"
-                    data-manage-name="${escapeHtml(item.name)}"
-                    data-manage-action="${escapeHtml(action)}"
-                >${escapeHtml(t(`manageAction${action}`))}</button>
-            `).join("")}
+            ${[...managementButtons, ...logButtons].join("")}
         </div>
     `;
 }
@@ -1035,6 +1068,51 @@ async function runManagementAction(button) {
     }
 }
 
+async function readLogs(button) {
+    const targetType = button.dataset.logTargetType;
+    const name = button.dataset.logName;
+    const url = logUrl(targetType, name, 100);
+    if (!url) return;
+
+    els.logPanel.classList.remove("hidden");
+    els.logTitle.textContent = `${name} ${t("logsTitle")}`;
+    els.logMeta.textContent = t("logsLoading", { name });
+    els.logOutput.textContent = t("logsLoading", { name });
+    els.inventorySections.querySelectorAll("[data-log-target-type]").forEach((item) => {
+        item.disabled = true;
+    });
+
+    try {
+        const result = await getJson(url);
+        state.latestLog = result;
+        renderLogResult(result);
+    } catch (error) {
+        els.logMeta.textContent = t("logsFailed", { exitCode: "--" });
+        els.logOutput.textContent = error.message;
+    } finally {
+        els.inventorySections.querySelectorAll("[data-log-target-type]").forEach((item) => {
+            item.disabled = false;
+        });
+    }
+}
+
+function logUrl(targetType, name, lines) {
+    if (targetType === "SYSTEMD_UNIT") {
+        const params = new URLSearchParams({ unit: name, lines: String(lines) });
+        return `/api/logs/systemd?${params.toString()}`;
+    }
+    return null;
+}
+
+function renderLogResult(result) {
+    els.logPanel.classList.remove("hidden");
+    els.logTitle.textContent = `${result.name} ${t("logsTitle")}`;
+    els.logMeta.textContent = result.success
+        ? t("logsUpdated", { time: formatTime(result.timestamp), lines: result.lines })
+        : t("logsFailed", { exitCode: result.exitCode ?? "--" });
+    els.logOutput.textContent = result.output || t("inventoryEmpty");
+}
+
 function setInventoryActionStatus(kind, message) {
     els.inventoryActionStatus.textContent = message;
     els.inventoryActionStatus.className = `inventory-action-status ${kind}`;
@@ -1129,9 +1207,18 @@ els.refreshInventoryButton.addEventListener("click", () => {
 });
 
 els.inventorySections.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-manage-action]");
-    if (!button) return;
-    runManagementAction(button).catch(console.error);
+    const logButton = event.target.closest("[data-log-target-type]");
+    if (logButton) {
+        readLogs(logButton).catch(console.error);
+        return;
+    }
+    const manageButton = event.target.closest("[data-manage-action]");
+    if (!manageButton) return;
+    runManagementAction(manageButton).catch(console.error);
+});
+
+els.closeLogPanelButton.addEventListener("click", () => {
+    els.logPanel.classList.add("hidden");
 });
 
 bindNavigation();

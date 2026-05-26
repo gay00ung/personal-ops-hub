@@ -272,6 +272,73 @@ class ServerTest {
     }
 
     @Test
+    fun `log service reads only allowed systemd logs`() = runBlocking {
+        val commands = mutableListOf<List<String>>()
+        val service = LogService(
+            config = ManagementConfig(
+                enabled = false,
+                allowedSystemdUnits = listOf("demo.service"),
+                restartOnlySystemdUnits = emptySet(),
+                allowedDockerContainers = emptyList(),
+            ),
+        ) { command, _ ->
+            commands += command
+            CommandOutput(true, 0, "2026-05-26T09:00:00+09:00 demo started")
+        }
+
+        val response = service.systemdLogs("demo", 1_000)
+
+        assertTrue(response.success)
+        assertEquals(500, response.lines)
+        assertEquals("demo.service", response.name)
+        assertEquals(
+            listOf("journalctl", "-u", "demo.service", "-n", "500", "--no-pager", "--output=short-iso"),
+            commands.single(),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            runBlocking { service.systemdLogs("ssh", 100) }
+        }
+        Unit
+    }
+
+    @Test
+    fun `log service decorates allowed systemd inventory rows`() {
+        val service = LogService(
+            config = ManagementConfig(
+                enabled = false,
+                allowedSystemdUnits = listOf("demo.service"),
+                restartOnlySystemdUnits = emptySet(),
+                allowedDockerContainers = emptyList(),
+            ),
+        )
+        val section = InventorySection(
+            key = "RUNNING_SERVICES",
+            title = "Running services",
+            source = "systemctl",
+            available = true,
+            items = listOf(
+                InventoryItem(kind = "systemd-service", name = "demo.service"),
+                InventoryItem(kind = "systemd-service", name = "ssh.service"),
+            ),
+        )
+
+        val decorated = service.decorateSection(section)
+
+        assertEquals(listOf(LogTargetType.SYSTEMD_UNIT), decorated.items.single { it.name == "demo.service" }.logs)
+        assertEquals(emptyList(), decorated.items.single { it.name == "ssh.service" }.logs)
+    }
+
+    @Test
+    fun `systemd logs endpoint rejects disallowed unit`() = testApplication {
+        configure()
+
+        val response = client.get("/api/logs/systemd?unit=ssh")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertContains(response.bodyAsText(), "systemd unit is not allowed")
+    }
+
+    @Test
     fun `events can be filtered and acknowledged`() = testApplication {
         configure()
 
