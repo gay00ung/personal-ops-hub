@@ -10,6 +10,7 @@ A personal server monitoring and automation hub built with Ktor.
 - Shows a read-only server inventory for cron, systemd timers, services, Docker, and listening ports.
 - Shows recent `journalctl` output for explicitly allowed systemd units.
 - Shows recent `docker logs` output for explicitly allowed Docker containers.
+- Searches dashboard sections, service checks, inventory rows, and events from a quick jump dialog.
 - Can start, stop, or restart explicitly allowed systemd units and Docker containers from the dashboard.
 - Records incident, recovery, deploy, backup, RSS, page-watch, and report events.
 - Streams live metrics over WebSocket at `/ws/metrics`.

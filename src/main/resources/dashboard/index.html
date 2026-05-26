@@ -43,6 +43,7 @@
                         <span aria-hidden="true">|</span>
                         <button id="localeEnButton" type="button" data-locale="en">EN</button>
                     </div>
+                    <button id="quickJumpButton" class="button secondary" type="button" data-i18n="quickJump">Search</button>
                     <button id="runChecksButton" class="button secondary" type="button" data-i18n="runChecks">Run checks</button>
                     <button id="testAlertButton" class="button primary" type="button" data-i18n="testAlert">Test alert</button>
                 </div>
@@ -198,6 +199,20 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <div id="quickJumpOverlay" class="quick-jump-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="quickJumpTitle">
+        <div class="quick-jump-panel">
+            <div class="quick-jump-head">
+                <h2 id="quickJumpTitle" data-i18n="quickJumpTitle">Search dashboard</h2>
+                <button id="closeQuickJumpButton" class="button compact secondary" type="button" data-i18n="quickJumpClose">Close</button>
+            </div>
+            <label class="quick-jump-input" for="quickJumpInput">
+                <span data-i18n="quickJumpInputLabel">Search</span>
+                <input id="quickJumpInput" type="search" autocomplete="off" placeholder="Search sections, services, containers, ports, events" data-i18n-placeholder="quickJumpPlaceholder">
+            </label>
+            <ol id="quickJumpResults" class="quick-jump-results" aria-label="Search results"></ol>
+        </div>
     </div>
 
     <script src="/assets/dashboard.js" defer></script>

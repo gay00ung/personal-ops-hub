@@ -83,6 +83,7 @@ class ServerTest {
         assertContains(body, "KR")
         assertContains(body, "EN")
         assertContains(body, "Jobs")
+        assertContains(body, "quickJumpButton")
     }
 
     @Test

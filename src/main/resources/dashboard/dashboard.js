@@ -91,6 +91,16 @@ const translations = {
         logsUpdated: "Updated {time} · last {lines} lines",
         logsFailed: "Failed to load logs · exit {exitCode}",
         closeLogs: "Close",
+        quickJump: "Search",
+        quickJumpTitle: "Search dashboard",
+        quickJumpClose: "Close",
+        quickJumpInputLabel: "Search",
+        quickJumpPlaceholder: "Search sections, services, containers, ports, events",
+        quickJumpNoResults: "No matching results",
+        quickJumpGroupSection: "Section",
+        quickJumpGroupService: "Service",
+        quickJumpGroupInventory: "Inventory",
+        quickJumpGroupEvent: "Event",
         recentEvents: "Recent Events",
         recentEventsDesc: "Incidents, recoveries, reports, deploys, and backup results. Recoveries can close incidents automatically.",
         eventSearchLabel: "Search",
@@ -223,6 +233,16 @@ const translations = {
         logsUpdated: "{time} 갱신 · 최근 {lines}줄",
         logsFailed: "로그 불러오기 실패 · 종료 코드 {exitCode}",
         closeLogs: "닫기",
+        quickJump: "검색",
+        quickJumpTitle: "대시보드 검색",
+        quickJumpClose: "닫기",
+        quickJumpInputLabel: "검색",
+        quickJumpPlaceholder: "섹션, 서비스, 컨테이너, 포트, 이벤트 검색",
+        quickJumpNoResults: "일치하는 결과 없음",
+        quickJumpGroupSection: "섹션",
+        quickJumpGroupService: "서비스",
+        quickJumpGroupInventory: "인벤토리",
+        quickJumpGroupEvent: "이벤트",
         recentEvents: "최근 이벤트",
         recentEventsDesc: "장애, 복구, 리포트, 배포, 백업 결과입니다. 복구가 감지되면 관련 장애는 자동으로 완료될 수 있습니다.",
         eventSearchLabel: "검색",
@@ -279,6 +299,9 @@ const state = {
     latestLog: null,
     latestSocketState: "websocket",
     navLockUntil: 0,
+    quickJumpOpen: false,
+    quickJumpQuery: "",
+    quickJumpIndex: 0,
     events: [],
     selectedEventId: null,
     eventSearchTimer: null,
@@ -321,6 +344,11 @@ const els = {
     logMeta: document.getElementById("logMeta"),
     logOutput: document.getElementById("logOutput"),
     closeLogPanelButton: document.getElementById("closeLogPanelButton"),
+    quickJumpButton: document.getElementById("quickJumpButton"),
+    quickJumpOverlay: document.getElementById("quickJumpOverlay"),
+    quickJumpInput: document.getElementById("quickJumpInput"),
+    quickJumpResults: document.getElementById("quickJumpResults"),
+    closeQuickJumpButton: document.getElementById("closeQuickJumpButton"),
     refreshInventoryButton: document.getElementById("refreshInventoryButton"),
     runChecksButton: document.getElementById("runChecksButton"),
     testAlertButton: document.getElementById("testAlertButton"),
@@ -443,6 +471,7 @@ function applyLocale() {
     });
     els.languageToggle.setAttribute("aria-label", t("languageLabel"));
     els.themeToggle.setAttribute("aria-label", t("themeLabel"));
+    els.quickJumpResults.setAttribute("aria-label", t("quickJumpTitle"));
     els.localeButtons.forEach((button) => {
         const active = button.dataset.locale === state.locale;
         button.classList.toggle("active", active);
@@ -454,6 +483,7 @@ function applyLocale() {
     else if (state.latestSnapshot) renderSnapshot(state.latestSnapshot, false);
     if (state.latestInventory) renderInventory(state.latestInventory, false);
     if (state.latestLog) renderLogResult(state.latestLog);
+    if (state.quickJumpOpen) renderQuickJumpResults();
     syncEventFilterButtons();
     renderEventDetail();
     drawChart();
@@ -576,8 +606,8 @@ function renderServices(services) {
         return;
     }
 
-    els.servicesBody.innerHTML = services.map((service) => `
-        <tr>
+    els.servicesBody.innerHTML = services.map((service, index) => `
+        <tr data-service-target="${escapeHtml(serviceTargetId(service, index))}">
             <td>${escapeHtml(service.name)}</td>
             <td>${escapeHtml(kindLabel(service.kind))}</td>
             <td><span class="cell-status ${statusClass(service.status)}">${escapeHtml(statusLabel(service.status))}</span></td>
@@ -585,6 +615,10 @@ function renderServices(services) {
             <td>${escapeHtml(localizeServiceMessage(service.message || ""))}</td>
         </tr>
     `).join("");
+}
+
+function serviceTargetId(service, index) {
+    return stableTargetId(`service:${index}:${service.kind}:${service.name}`);
 }
 
 function renderEvents(events) {
@@ -704,15 +738,15 @@ function renderInventory(inventory, remember = true) {
 }
 
 function renderInventorySection(section) {
-    const title = t(`inventorySection${section.key}`) || section.title;
+    const title = inventorySectionTitle(section);
     const state = section.available ? `${section.items.length}` : t("inventoryUnavailable");
     const sectionClass = `inventory-section-${String(section.key || "").toLowerCase().replaceAll("_", "-")}`;
     const rows = section.available
-        ? renderInventoryRows(section.items)
+        ? renderInventoryRows(section.items, section.key)
         : `<tr><td colspan="6" class="empty">${escapeHtml(section.message || t("inventoryUnavailable"))}</td></tr>`;
 
     return `
-        <article class="inventory-section ${escapeHtml(sectionClass)}">
+        <article class="inventory-section ${escapeHtml(sectionClass)}" data-inventory-section-target="${escapeHtml(inventorySectionTargetId(section.key))}">
             <div class="inventory-section-head">
                 <div>
                     <h3>${escapeHtml(title)}</h3>
@@ -739,12 +773,12 @@ function renderInventorySection(section) {
     `;
 }
 
-function renderInventoryRows(items) {
+function renderInventoryRows(items, sectionKey) {
     if (!items || items.length === 0) {
         return `<tr><td colspan="6" class="empty">${escapeHtml(t("inventoryEmpty"))}</td></tr>`;
     }
-    return items.map((item) => `
-        <tr>
+    return items.map((item, index) => `
+        <tr data-inventory-target="${escapeHtml(inventoryItemTargetId(sectionKey, item, index))}">
             <td>
                 <strong class="inventory-name">${escapeHtml(item.name)}</strong>
                 <small>${escapeHtml(item.kind || "")}</small>
@@ -756,6 +790,28 @@ function renderInventoryRows(items) {
             <td><code>${escapeHtml(item.command || item.raw || "--")}</code></td>
         </tr>
     `).join("");
+}
+
+function inventorySectionTitle(section) {
+    const key = `inventorySection${section.key}`;
+    const label = t(key);
+    return label === key ? section.title : label;
+}
+
+function inventorySectionTargetId(sectionKey) {
+    return stableTargetId(`inventory-section:${sectionKey}`);
+}
+
+function inventoryItemTargetId(sectionKey, item, index) {
+    return stableTargetId(`inventory:${sectionKey}:${index}:${item.kind}:${item.name}`);
+}
+
+function stableTargetId(value) {
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) {
+        hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+    }
+    return `target-${Math.abs(hash).toString(36)}`;
 }
 
 function renderManagementActions(item) {
@@ -1122,6 +1178,260 @@ function renderLogResult(result) {
     els.logOutput.textContent = result.output || t("inventoryEmpty");
 }
 
+function openQuickJump(query = "") {
+    state.quickJumpOpen = true;
+    state.quickJumpQuery = query;
+    state.quickJumpIndex = 0;
+    els.quickJumpOverlay.classList.remove("hidden");
+    document.body.classList.add("quick-jump-active");
+    els.quickJumpInput.value = query;
+    renderQuickJumpResults();
+    requestAnimationFrame(() => {
+        els.quickJumpInput.focus();
+        els.quickJumpInput.select();
+    });
+}
+
+function closeQuickJump() {
+    state.quickJumpOpen = false;
+    els.quickJumpOverlay.classList.add("hidden");
+    document.body.classList.remove("quick-jump-active");
+    els.quickJumpInput.value = "";
+    state.quickJumpQuery = "";
+    state.quickJumpIndex = 0;
+    els.quickJumpInput.removeAttribute("aria-activedescendant");
+}
+
+function renderQuickJumpResults() {
+    const items = visibleQuickJumpItems();
+    if (items.length === 0) {
+        els.quickJumpResults.innerHTML = `<li class="quick-jump-empty">${escapeHtml(t("quickJumpNoResults"))}</li>`;
+        els.quickJumpInput.removeAttribute("aria-activedescendant");
+        return;
+    }
+
+    state.quickJumpIndex = Math.max(0, Math.min(state.quickJumpIndex, items.length - 1));
+    els.quickJumpResults.innerHTML = items.map((item, index) => `
+        <li>
+            <button
+                id="quickJumpResult-${index}"
+                type="button"
+                class="quick-jump-result ${index === state.quickJumpIndex ? "active" : ""}"
+                data-quick-jump-index="${index}"
+                aria-selected="${index === state.quickJumpIndex}"
+            >
+                <span class="quick-jump-kind">${escapeHtml(t(item.groupKey))}</span>
+                <span class="quick-jump-copy">
+                    <strong>${escapeHtml(item.title)}</strong>
+                    <small>${escapeHtml(item.subtitle || "")}</small>
+                </span>
+            </button>
+        </li>
+    `).join("");
+    els.quickJumpInput.setAttribute("aria-activedescendant", `quickJumpResult-${state.quickJumpIndex}`);
+}
+
+function visibleQuickJumpItems() {
+    const query = normalizeSearch(state.quickJumpQuery);
+    const items = buildQuickJumpItems();
+    const filtered = query
+        ? items
+            .filter((item) => normalizeSearch(item.keywords).includes(query))
+            .map((item, index) => ({ item, index, score: quickJumpScore(item, query) }))
+            .sort((a, b) => a.score - b.score || a.index - b.index)
+            .map(({ item }) => item)
+        : items;
+    return filtered.slice(0, 12);
+}
+
+function buildQuickJumpItems() {
+    const sectionItems = [
+        quickSectionItem("overview", t("navOverview"), t("lastHourDesc")),
+        quickSectionItem("services", t("navServices"), t("serviceHealthDesc")),
+        quickSectionItem("jobs", t("navJobs"), t("jobsInventoryDesc")),
+        quickSectionItem("events", t("navEvents"), t("recentEventsDesc")),
+        quickSectionItem("automation", t("navAutomation"), t("automationDesc")),
+    ];
+
+    const serviceItems = (state.latestSummary?.services || []).map((service, index) => ({
+        groupKey: "quickJumpGroupService",
+        title: service.name,
+        subtitle: [kindLabel(service.kind), statusLabel(service.status), localizeServiceMessage(service.message || "")]
+            .filter(Boolean)
+            .join(" · "),
+        keywords: [service.name, service.kind, service.status, service.message, kindLabel(service.kind), statusLabel(service.status)].join(" "),
+        action: "target",
+        sectionId: "services",
+        selector: `[data-service-target="${serviceTargetId(service, index)}"]`,
+    }));
+
+    const inventorySections = (state.latestInventory?.sections || []).map((section) => ({
+        groupKey: "quickJumpGroupInventory",
+        title: inventorySectionTitle(section),
+        subtitle: [section.source, section.available ? `${section.items.length}` : t("inventoryUnavailable")]
+            .filter(Boolean)
+            .join(" · "),
+        keywords: [inventorySectionTitle(section), section.title, section.source, section.message]
+            .filter(Boolean)
+            .join(" "),
+        action: "target",
+        sectionId: "jobs",
+        selector: `[data-inventory-section-target="${inventorySectionTargetId(section.key)}"]`,
+    }));
+
+    const inventoryItems = (state.latestInventory?.sections || []).flatMap((section) => {
+        if (!section.available) return [];
+        return (section.items || []).map((item, index) => ({
+            groupKey: "quickJumpGroupInventory",
+            title: item.name,
+            subtitle: [inventorySectionTitle(section), item.kind, item.status, item.schedule, item.detail]
+                .filter(Boolean)
+                .join(" · "),
+            keywords: [
+                inventorySectionTitle(section),
+                section.source,
+                item.kind,
+                item.name,
+                item.status,
+                item.schedule,
+                item.detail,
+                item.command,
+                item.raw,
+            ].filter(Boolean).join(" "),
+            action: "target",
+            sectionId: "jobs",
+            selector: `[data-inventory-target="${inventoryItemTargetId(section.key, item, index)}"]`,
+        }));
+    });
+
+    const eventItems = (state.events.length ? state.events : state.latestSummary?.events || []).map((event) => ({
+        groupKey: "quickJumpGroupEvent",
+        title: localizeEventMessage(event.message),
+        subtitle: [severityLabel(event.severity), eventStateLabel(event), localizeSource(event.source)]
+            .filter(Boolean)
+            .join(" · "),
+        keywords: [event.message, event.details, event.source, event.severity, event.state, localizeEventMessage(event.message)]
+            .filter(Boolean)
+            .join(" "),
+        action: "event",
+        sectionId: "events",
+        eventId: event.id,
+    }));
+
+    return [...sectionItems, ...serviceItems, ...inventorySections, ...inventoryItems, ...eventItems];
+}
+
+function quickSectionItem(sectionId, title, subtitle) {
+    return {
+        groupKey: "quickJumpGroupSection",
+        title,
+        subtitle,
+        keywords: `${sectionId} ${title} ${subtitle}`,
+        action: "section",
+        sectionId,
+    };
+}
+
+function normalizeSearch(value) {
+    return String(value || "")
+        .toLowerCase()
+        .normalize("NFKC")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function quickJumpScore(item, query) {
+    const title = normalizeSearch(item.title);
+    const subtitle = normalizeSearch(item.subtitle);
+    if (title === query) return 0;
+    if (title.startsWith(query)) return 1;
+    if (title.includes(query)) return 2;
+    if (subtitle.startsWith(query)) return 3;
+    if (subtitle.includes(query)) return 4;
+    return 5;
+}
+
+async function activateQuickJumpIndex(index = state.quickJumpIndex) {
+    const item = visibleQuickJumpItems()[index];
+    if (!item) return;
+    closeQuickJump();
+
+    if (item.action === "event") {
+        await selectQuickJumpEvent(item.eventId);
+        return;
+    }
+
+    scrollToDashboardTarget(item.sectionId, item.selector);
+}
+
+async function selectQuickJumpEvent(eventId) {
+    state.eventFilters.state = "ALL";
+    syncEventFilterButtons();
+    await refreshEvents();
+    state.selectedEventId = Number(eventId);
+    renderEvents(state.events);
+    scrollToDashboardTarget("events", `[data-event-id="${eventId}"]`);
+}
+
+function scrollToDashboardTarget(sectionId, selector) {
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+
+    state.navLockUntil = Date.now() + 900;
+    history.replaceState(null, "", `#${sectionId}`);
+    setActiveNav(sectionId);
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    if (!selector) return;
+    window.setTimeout(() => {
+        const target = document.querySelector(selector);
+        if (!target) return;
+        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+        pulseTarget(target);
+    }, 220);
+}
+
+function pulseTarget(target) {
+    document.querySelectorAll(".quick-jump-highlight").forEach((node) => {
+        node.classList.remove("quick-jump-highlight");
+    });
+    target.classList.add("quick-jump-highlight");
+    window.setTimeout(() => {
+        target.classList.remove("quick-jump-highlight");
+    }, 1800);
+}
+
+function handleQuickJumpKeydown(event) {
+    const key = event.key;
+    if ((event.metaKey || event.ctrlKey) && key.toLowerCase() === "k") {
+        event.preventDefault();
+        openQuickJump(state.quickJumpQuery);
+        return;
+    }
+    if (!state.quickJumpOpen) return;
+
+    if (key === "Escape") {
+        event.preventDefault();
+        closeQuickJump();
+        return;
+    }
+
+    if (key === "ArrowDown" || key === "ArrowUp") {
+        event.preventDefault();
+        const count = visibleQuickJumpItems().length;
+        if (count === 0) return;
+        const delta = key === "ArrowDown" ? 1 : -1;
+        state.quickJumpIndex = (state.quickJumpIndex + delta + count) % count;
+        renderQuickJumpResults();
+        return;
+    }
+
+    if (key === "Enter") {
+        event.preventDefault();
+        activateQuickJumpIndex().catch(console.error);
+    }
+}
+
 function setInventoryActionStatus(kind, message) {
     els.inventoryActionStatus.textContent = message;
     els.inventoryActionStatus.className = `inventory-action-status ${kind}`;
@@ -1215,6 +1525,39 @@ els.refreshInventoryButton.addEventListener("click", () => {
     refreshInventory().catch(console.error);
 });
 
+els.quickJumpButton.addEventListener("click", () => {
+    openQuickJump();
+});
+
+els.closeQuickJumpButton.addEventListener("click", () => {
+    closeQuickJump();
+});
+
+els.quickJumpOverlay.addEventListener("click", (event) => {
+    if (event.target === els.quickJumpOverlay) closeQuickJump();
+});
+
+els.quickJumpInput.addEventListener("input", () => {
+    state.quickJumpQuery = els.quickJumpInput.value;
+    state.quickJumpIndex = 0;
+    renderQuickJumpResults();
+});
+
+els.quickJumpResults.addEventListener("mousemove", (event) => {
+    const button = event.target.closest("[data-quick-jump-index]");
+    if (!button) return;
+    const index = Number(button.dataset.quickJumpIndex);
+    if (index === state.quickJumpIndex) return;
+    state.quickJumpIndex = index;
+    renderQuickJumpResults();
+});
+
+els.quickJumpResults.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-quick-jump-index]");
+    if (!button) return;
+    activateQuickJumpIndex(Number(button.dataset.quickJumpIndex)).catch(console.error);
+});
+
 els.inventorySections.addEventListener("click", (event) => {
     const logButton = event.target.closest("[data-log-target-type]");
     if (logButton) {
@@ -1229,6 +1572,8 @@ els.inventorySections.addEventListener("click", (event) => {
 els.closeLogPanelButton.addEventListener("click", () => {
     els.logPanel.classList.add("hidden");
 });
+
+document.addEventListener("keydown", handleQuickJumpKeydown);
 
 bindNavigation();
 applyLocale();
