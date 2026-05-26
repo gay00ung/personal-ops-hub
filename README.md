@@ -16,6 +16,7 @@ A personal server monitoring and automation hub built with Ktor.
 - Streams live metrics over WebSocket at `/ws/metrics`.
 - Sends alerts to Discord and/or Telegram when configured.
 - Serves a built-in dashboard at `/dashboard`.
+- Serves built-in API documentation at `/docs/api`.
 - Supports GitHub webhook deploys with HMAC signature verification.
 - Sends a daily server report.
 - Watches RSS feeds and page content changes, including last-check status in the dashboard.
@@ -30,6 +31,12 @@ Open:
 
 ```text
 http://127.0.0.1:8080/dashboard
+```
+
+API reference:
+
+```text
+http://127.0.0.1:8080/docs/api
 ```
 
 ## Server install and update

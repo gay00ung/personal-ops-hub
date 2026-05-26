@@ -36,6 +36,13 @@ fun Application.configureRouting() {
                     contentType = ContentType.Text.Html,
                 )
             }
+
+            get("/docs/api") {
+                call.respondText(
+                    text = this::class.java.classLoader.getResource("dashboard/api-docs.html")!!.readText(),
+                    contentType = ContentType.Text.Html,
+                )
+            }
         }
 
         route("/api") {

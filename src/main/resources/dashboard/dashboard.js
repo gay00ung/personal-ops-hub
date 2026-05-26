@@ -14,6 +14,7 @@ const translations = {
         navJobs: "Jobs",
         navEvents: "Events",
         navAutomation: "Automation",
+        navApiDocs: "API Docs",
         waitingTelemetry: "Waiting for server telemetry...",
         runChecks: "Run checks",
         testAlert: "Test alert",
@@ -161,6 +162,7 @@ const translations = {
         navJobs: "작업",
         navEvents: "이벤트",
         navAutomation: "자동화",
+        navApiDocs: "API 문서",
         waitingTelemetry: "서버 상태를 기다리는 중...",
         runChecks: "검사 실행",
         testAlert: "알림 테스트",
@@ -807,15 +809,15 @@ function renderInventoryRows(items, sectionKey) {
     }
     return items.map((item, index) => `
         <tr data-inventory-target="${escapeHtml(inventoryItemTargetId(sectionKey, item, index))}">
-            <td>
+            <td data-label="${escapeHtml(t("inventoryColumnName"))}">
                 <strong class="inventory-name">${escapeHtml(item.name)}</strong>
                 <small>${escapeHtml(item.kind || "")}</small>
             </td>
-            <td>${renderManagementActions(item)}</td>
-            <td>${escapeHtml(item.status || "--")}</td>
-            <td>${escapeHtml(item.schedule || "--")}</td>
-            <td>${escapeHtml(item.detail || "--")}</td>
-            <td><code>${escapeHtml(item.command || item.raw || "--")}</code></td>
+            <td data-label="${escapeHtml(t("inventoryColumnActions"))}">${renderManagementActions(item)}</td>
+            <td data-label="${escapeHtml(t("inventoryColumnStatus"))}">${escapeHtml(item.status || "--")}</td>
+            <td data-label="${escapeHtml(t("inventoryColumnSchedule"))}">${escapeHtml(item.schedule || "--")}</td>
+            <td data-label="${escapeHtml(t("inventoryColumnDetail"))}">${escapeHtml(item.detail || "--")}</td>
+            <td data-label="${escapeHtml(t("inventoryColumnCommand"))}"><code>${escapeHtml(item.command || item.raw || "--")}</code></td>
         </tr>
     `).join("");
 }

@@ -87,6 +87,19 @@ class ServerTest {
     }
 
     @Test
+    fun `api docs endpoint serves built in reference`() = testApplication {
+        configure()
+
+        val response = client.get("/docs/api")
+        val body = response.bodyAsText()
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertContains(body, "API Docs")
+        assertContains(body, "/api/summary")
+        assertContains(body, "/api/manage/actions")
+    }
+
+    @Test
     fun `summary endpoint includes metrics and automation`() = testApplication {
         configure()
 
