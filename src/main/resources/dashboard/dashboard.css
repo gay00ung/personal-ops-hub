@@ -1189,13 +1189,13 @@ td:last-child {
     line-height: 1.5;
 }
 
-.detail-actions {
+.event-detail .detail-actions {
     display: grid;
-    gap: 12px;
-    margin-top: 18px;
+    gap: 22px;
+    margin-top: 24px;
 }
 
-.detail-actions .button {
+.event-detail .detail-actions .button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
