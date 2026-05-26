@@ -1182,11 +1182,26 @@ td:last-child {
     overflow-wrap: anywhere;
 }
 
+.event-state-note {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 .detail-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.detail-actions .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    width: 100%;
+    padding-inline: 16px;
 }
 
 .empty {
