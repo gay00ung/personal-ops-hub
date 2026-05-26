@@ -10,6 +10,7 @@ import io.ktor.server.auth.UserIdPrincipal
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.basic
 import io.ktor.server.auth.principal
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -60,6 +61,20 @@ suspend fun ApplicationCall.requireAdminToken(hub: OpsHub): Boolean {
         ErrorResponse("unauthorized", "missing or invalid admin token"),
     )
     return false
+}
+
+fun ApplicationCall.managementAuditContext(hub: OpsHub): ManagementAuditContext {
+    val actor = principal<UserIdPrincipal>()?.name ?: if (hub.config.auth.tokenEnabled) {
+        "api-token"
+    } else {
+        "auth-disabled"
+    }
+    val origin = request.origin
+    return ManagementAuditContext(
+        actor = actor,
+        remoteAddress = origin.remoteAddress.ifBlank { origin.remoteHost },
+        userAgent = request.header(HttpHeaders.UserAgent),
+    )
 }
 
 private fun constantTimeEquals(a: String, b: String): Boolean =

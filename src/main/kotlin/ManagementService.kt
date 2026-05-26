@@ -25,7 +25,10 @@ class ManagementService(
         )
     }
 
-    suspend fun runAction(request: ManagementActionRequest): ManagementActionResponse {
+    suspend fun runAction(
+        request: ManagementActionRequest,
+        auditContext: ManagementAuditContext = ManagementAuditContext(),
+    ): ManagementActionResponse {
         val command = commandFor(request)
         val result = commandRunner(command, 20)
         val normalizedName = normalizedName(request.targetType, request.name)
@@ -35,7 +38,7 @@ class ManagementService(
             severity = if (result.success) EventSeverity.INFO else EventSeverity.WARNING,
             source = source,
             message = message,
-            details = result.output.takeIf { it.isNotBlank() },
+            details = actionDetails(result.output, auditContext),
             actionRequired = !result.success,
         )
         return ManagementActionResponse(
@@ -221,7 +224,63 @@ class ManagementService(
             ManagementTargetType.DOCKER_CONTAINER -> "docker container"
         }
 
+    private fun actionDetails(output: String, auditContext: ManagementAuditContext): String =
+        buildList {
+            if (output.isNotBlank()) {
+                add("output:")
+                add(output.trimEnd())
+            }
+            add("audit:")
+            add("actor=${auditContext.actor.auditValue(maxLength = 80)}")
+            add("remote=${redactRemoteAddressForAudit(auditContext.remoteAddress)}")
+            add("userAgent=${auditContext.userAgent.auditValue(maxLength = 160)}")
+        }.joinToString("\n")
+
     private companion object {
         private val dockerNameRegex = Regex("""[A-Za-z0-9][A-Za-z0-9_.-]*""")
     }
+}
+
+data class ManagementAuditContext(
+    val actor: String? = null,
+    val remoteAddress: String? = null,
+    val userAgent: String? = null,
+)
+
+internal fun redactRemoteAddressForAudit(remoteAddress: String?): String {
+    val value = remoteAddress.auditValue(maxLength = 128).removePrefix("/").trim()
+    if (value == "unknown") return value
+
+    val ipv4Match = ManagementAuditRegex.ipv4.matchEntire(value)
+    if (ipv4Match != null) {
+        val host = ipv4Match.groupValues.drop(1).take(4).joinToString(".")
+        if (host == "127.0.0.1" || host == "0.0.0.0") return "local"
+        return ipv4Match.groupValues.drop(1).take(3).joinToString(".") + ".x"
+    }
+
+    val host = if (value.startsWith("[")) {
+        value.substringAfter("[").substringBefore("]")
+    } else {
+        value
+    }.substringBefore('%')
+
+    if (host == "localhost" || host == "::1" || host == "0:0:0:0:0:0:0:1") return "local"
+    if (host.contains(":")) {
+        val prefix = host.split(':').filter { it.isNotBlank() }.take(3).joinToString(":")
+        return if (prefix.isBlank()) "ipv6:..." else "$prefix:..."
+    }
+
+    return host.auditValue(maxLength = 64)
+}
+
+private fun String?.auditValue(maxLength: Int): String {
+    val value = orEmpty()
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+        .ifBlank { "unknown" }
+    return if (value.length <= maxLength) value else value.take(maxLength - 3) + "..."
+}
+
+private object ManagementAuditRegex {
+    val ipv4: Regex = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?::\d+)?$""")
 }

@@ -126,7 +126,8 @@ fun Application.configureRouting() {
                 post("/manage/actions") {
                     if (!call.requireAdminToken(hub)) return@post
                     val request = call.receive<ManagementActionRequest>()
-                    val response = runCatching { hub.runManagementAction(request) }
+                    val auditContext = call.managementAuditContext(hub)
+                    val response = runCatching { hub.runManagementAction(request, auditContext) }
                         .getOrElse { error ->
                             return@post call.respond(
                                 HttpStatusCode.BadRequest,

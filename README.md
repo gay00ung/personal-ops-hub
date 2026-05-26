@@ -61,6 +61,8 @@ OPS_ALLOWED_DOCKER_CONTAINERS=
 
 Only targets listed in `OPS_ALLOWED_SYSTEMD_UNITS` or `OPS_ALLOWED_DOCKER_CONTAINERS` get action buttons. Set `OPS_ALLOWED_DOCKER_CONTAINERS=*` to allow actions on every Docker container visible in `docker ps --all`. `OPS_RESTART_ONLY_SYSTEMD_UNITS` can be used for units that should never be stopped from the UI. The generated systemd install env file defaults the app's own unit to restart-only.
 
+Each management action records an event with command output plus audit fields: actor, redacted remote address, and user-agent. Remote addresses are partially masked before storage.
+
 Systemd log viewing is read-only and uses the same `OPS_ALLOWED_SYSTEMD_UNITS` allowlist. The dashboard calls `journalctl -u <unit> -n <lines> --no-pager --output=short-iso` with a fixed command array and never accepts arbitrary commands.
 
 ## Docker run

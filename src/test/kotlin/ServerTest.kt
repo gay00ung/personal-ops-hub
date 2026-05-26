@@ -166,11 +166,21 @@ class ServerTest {
 
         val response = service.runAction(
             ManagementActionRequest(ManagementTargetType.SYSTEMD_UNIT, "demo", ManagementAction.RESTART),
+            ManagementAuditContext(
+                actor = "admin",
+                remoteAddress = "203.0.113.42",
+                userAgent = "PersonalOpsTest/1.0",
+            ),
         )
 
         assertTrue(response.success)
         assertEquals(listOf("systemctl", "restart", "demo.service"), commands.single())
-        assertContains(database.recentEvents(query = "demo.service").single().message, "succeeded")
+        val event = database.recentEvents(query = "demo.service").single()
+        assertContains(event.message, "succeeded")
+        assertContains(event.details.orEmpty(), "output:\nok")
+        assertContains(event.details.orEmpty(), "actor=admin")
+        assertContains(event.details.orEmpty(), "remote=203.0.113.x")
+        assertContains(event.details.orEmpty(), "userAgent=PersonalOpsTest/1.0")
         assertFailsWith<IllegalArgumentException> {
             runBlocking {
                 service.runAction(
@@ -186,6 +196,14 @@ class ServerTest {
             }
         }
         Unit
+    }
+
+    @Test
+    fun `management audit redacts remote addresses`() {
+        assertEquals("203.0.113.x", redactRemoteAddressForAudit("203.0.113.42"))
+        assertEquals("local", redactRemoteAddressForAudit("127.0.0.1"))
+        assertEquals("local", redactRemoteAddressForAudit("::1"))
+        assertEquals("2001:db8:85a3:...", redactRemoteAddressForAudit("2001:db8:85a3:0000:0000:8a2e:0370:7334"))
     }
 
     @Test

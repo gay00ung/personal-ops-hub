@@ -134,8 +134,11 @@ class OpsHub(val config: AppConfig) {
         return snapshot
     }
 
-    suspend fun runManagementAction(request: ManagementActionRequest): ManagementActionResponse =
-        managementService.runAction(request)
+    suspend fun runManagementAction(
+        request: ManagementActionRequest,
+        auditContext: ManagementAuditContext = ManagementAuditContext(),
+    ): ManagementActionResponse =
+        managementService.runAction(request, auditContext)
 
     suspend fun systemdLogs(unit: String, lines: Int): LogReadResponse =
         logService.systemdLogs(unit, lines)
