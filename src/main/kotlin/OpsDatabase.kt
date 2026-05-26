@@ -281,6 +281,17 @@ class OpsDatabase(private val path: Path) {
         }
 
     @Synchronized
+    fun getStateEntry(key: String): AutomationStateEntry? =
+        connection().use { conn ->
+            conn.prepareStatement("select value, updated_at from automation_state where key = ?").use { stmt ->
+                stmt.setString(1, key)
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) AutomationStateEntry(rs.getString("value"), rs.getLong("updated_at")) else null
+                }
+            }
+        }
+
+    @Synchronized
     fun setState(key: String, value: String) {
         connection().use { conn ->
             conn.prepareStatement(
@@ -404,3 +415,8 @@ class OpsDatabase(private val path: Path) {
         }
     }
 }
+
+data class AutomationStateEntry(
+    val value: String,
+    val updatedAt: Long,
+)

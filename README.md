@@ -18,7 +18,7 @@ A personal server monitoring and automation hub built with Ktor.
 - Serves a built-in dashboard at `/dashboard`.
 - Supports GitHub webhook deploys with HMAC signature verification.
 - Sends a daily server report.
-- Watches RSS feeds and page content changes.
+- Watches RSS feeds and page content changes, including last-check status in the dashboard.
 
 ## Local run
 

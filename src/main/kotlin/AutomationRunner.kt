@@ -33,8 +33,8 @@ class AutomationRunner(
                 config.automations.dailyReportMinute,
                 config.automations.zoneId.id,
             ),
-            rssFeeds = config.automations.rssFeeds.map { NamedUrlDto(it.name, it.url) },
-            pageWatches = config.automations.pageWatches.map { NamedUrlDto(it.name, it.url) },
+            rssFeeds = automationTargets("rss", config.automations.rssFeeds),
+            pageWatches = automationTargets("page-watch", config.automations.pageWatches),
             deployConfigured = !config.automations.deployCommand.isNullOrBlank(),
             alertTargetsConfigured = notifier.configuredTargets(),
         )
@@ -118,6 +118,7 @@ class AutomationRunner(
         for (feed in config.automations.rssFeeds) {
             val source = "rss:${feed.name}"
             val document = fetchXml(feed.url).getOrElse { error ->
+                setAutomationStatus("rss", feed.name, AutomationTargetStatus.WARNING, error.message ?: "RSS fetch failed")
                 val event = database.insertEvent(EventSeverity.WARNING, source, error.message ?: "RSS fetch failed")
                 notifier.sendEvent("RSS fetch failed: ${feed.name}", event)
                 continue
@@ -125,6 +126,7 @@ class AutomationRunner(
             val resolvedCount = database.resolveOpenEvents(source)
             notifier.sendRecovery("RSS fetch recovered: ${feed.name}", source, resolvedCount, "feed fetch succeeded")
             val items = extractFeedItems(document)
+            setAutomationStatus("rss", feed.name, AutomationTargetStatus.OK, "feed fetch succeeded (${items.size} items)")
             val initializedKey = "rss:${feed.name}:initialized"
             val initialized = database.getState(initializedKey) == "true"
             for (item in items.take(5)) {
@@ -147,6 +149,7 @@ class AutomationRunner(
         for (watch in config.automations.pageWatches) {
             val fetchSource = "page-fetch:${watch.name}"
             val body = fetchText(watch.url).getOrElse { error ->
+                setAutomationStatus("page-watch", watch.name, AutomationTargetStatus.WARNING, error.message ?: "page fetch failed")
                 val event = database.insertEvent(EventSeverity.WARNING, fetchSource, error.message ?: "page fetch failed")
                 notifier.sendEvent("Page fetch failed: ${watch.name}", event)
                 continue
@@ -159,10 +162,44 @@ class AutomationRunner(
             database.setState(key, hash)
             if (previous != null && previous != hash) {
                 val message = "content changed: ${watch.url}"
+                setAutomationStatus("page-watch", watch.name, AutomationTargetStatus.WARNING, "content changed")
                 val event = database.insertEvent(EventSeverity.WARNING, "page-change:${watch.name}", message)
                 notifier.sendEvent("Page changed: ${watch.name}", event)
+            } else {
+                setAutomationStatus("page-watch", watch.name, AutomationTargetStatus.OK, "page fetch succeeded")
             }
         }
+    }
+
+    private fun automationTargets(prefix: String, targets: List<NamedUrlConfig>): List<AutomationTargetSummary> =
+        targets.map { target ->
+            val entry = database.getStateEntry("$prefix:${target.name}:status")
+            val (status, message) = parseAutomationStatus(entry?.value)
+            AutomationTargetSummary(
+                name = target.name,
+                url = target.url,
+                status = status,
+                checkedAt = entry?.updatedAt,
+                message = message,
+            )
+        }
+
+    private fun setAutomationStatus(
+        prefix: String,
+        name: String,
+        status: AutomationTargetStatus,
+        message: String,
+    ) {
+        database.setState("$prefix:$name:status", "${status.name}:$message")
+    }
+
+    private fun parseAutomationStatus(value: String?): Pair<AutomationTargetStatus, String?> {
+        if (value.isNullOrBlank()) return AutomationTargetStatus.UNKNOWN to null
+        val status = runCatching {
+            AutomationTargetStatus.valueOf(value.substringBefore(':'))
+        }.getOrDefault(AutomationTargetStatus.UNKNOWN)
+        val message = value.substringAfter(':', "").takeIf { it.isNotBlank() }
+        return status to message
     }
 
     private suspend fun fetchText(url: String): Result<String> =

@@ -50,6 +50,11 @@ const translations = {
         notConfigured: "Not configured",
         inAppEventsOnly: "In-app events only",
         none: "None",
+        automationStatusOK: "OK",
+        automationStatusWARNING: "Attention",
+        automationStatusUNKNOWN: "Waiting",
+        automationLastChecked: "Checked {time}",
+        automationNeverChecked: "Not checked yet",
         jobsInventory: "Jobs & Inventory",
         jobsInventoryDesc: "Read-only view of cron, systemd timers, services, containers, and listening ports.",
         refreshJobs: "Refresh",
@@ -192,6 +197,11 @@ const translations = {
         notConfigured: "설정 안 됨",
         inAppEventsOnly: "앱 이벤트만 기록",
         none: "없음",
+        automationStatusOK: "정상",
+        automationStatusWARNING: "확인 필요",
+        automationStatusUNKNOWN: "대기 중",
+        automationLastChecked: "{time} 확인",
+        automationNeverChecked: "아직 확인 전",
         jobsInventory: "작업 및 인벤토리",
         jobsInventoryDesc: "cron, systemd timer, 서비스, 컨테이너, 열린 포트를 읽기 전용으로 확인합니다.",
         refreshJobs: "새로고침",
@@ -705,12 +715,30 @@ function renderAutomation(automation) {
     els.alertTargets.textContent = automation.alertTargetsConfigured.length
         ? automation.alertTargetsConfigured.join(", ")
         : t("inAppEventsOnly");
-    els.rssFeeds.textContent = automation.rssFeeds.length
-        ? automation.rssFeeds.map((feed) => feed.name).join(", ")
-        : t("none");
-    els.pageWatches.textContent = automation.pageWatches.length
-        ? automation.pageWatches.map((watch) => watch.name).join(", ")
-        : t("none");
+    els.rssFeeds.innerHTML = renderAutomationTargets(automation.rssFeeds);
+    els.pageWatches.innerHTML = renderAutomationTargets(automation.pageWatches);
+}
+
+function renderAutomationTargets(targets) {
+    if (!targets || targets.length === 0) return escapeHtml(t("none"));
+    return `
+        <ol class="automation-targets">
+            ${targets.map((target) => {
+                const status = String(target.status || "UNKNOWN").toUpperCase();
+                const checkedAt = target.checkedAt ? t("automationLastChecked", { time: formatTime(target.checkedAt) }) : t("automationNeverChecked");
+                return `
+                    <li>
+                        <span class="automation-target-status ${status.toLowerCase()}">${escapeHtml(t(`automationStatus${status}`))}</span>
+                        <span class="automation-target-copy">
+                            <strong>${escapeHtml(target.name)}</strong>
+                            <small>${escapeHtml(target.message || target.url)}</small>
+                            <time>${escapeHtml(checkedAt)}</time>
+                        </span>
+                    </li>
+                `;
+            }).join("")}
+        </ol>
+    `;
 }
 
 function renderInventory(inventory, remember = true) {

@@ -547,7 +547,7 @@ canvas {
 .two-column {
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+    grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
     gap: 12px;
     margin-bottom: 12px;
 }
@@ -677,6 +677,73 @@ td:last-child {
     font-size: 13px;
     line-height: 1.45;
     overflow-wrap: anywhere;
+}
+
+.automation-targets {
+    list-style: none;
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+}
+
+.automation-targets li {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
+    align-items: start;
+}
+
+.automation-target-status {
+    width: fit-content;
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 820;
+    white-space: nowrap;
+}
+
+.automation-target-status.ok {
+    background: var(--good-soft);
+    color: var(--good);
+}
+
+.automation-target-status.warning {
+    background: var(--warn-soft);
+    color: var(--warn);
+}
+
+.automation-target-status.unknown {
+    background: var(--unknown-soft);
+    color: var(--unknown);
+}
+
+.automation-target-copy {
+    min-width: 0;
+}
+
+.automation-target-copy strong,
+.automation-target-copy small,
+.automation-target-copy time {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.automation-target-copy strong {
+    color: var(--text);
+    font-weight: 780;
+}
+
+.automation-target-copy small,
+.automation-target-copy time {
+    color: var(--muted);
+    font-size: 12px;
 }
 
 .inventory-panel {

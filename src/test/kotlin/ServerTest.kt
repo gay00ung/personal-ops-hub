@@ -121,6 +121,29 @@ class ServerTest {
     }
 
     @Test
+    fun `automation summary includes target status and timestamps`() {
+        val config = loadAppConfig(
+            mapOf(
+                "OPS_RSS_FEEDS" to "kotlin=https://example.com/rss.xml",
+                "OPS_PAGE_WATCHES" to "home=https://example.com",
+            ),
+        )
+        val database = OpsDatabase(tempDir!!.resolve("automation-summary.db"))
+        database.setState("rss:kotlin:status", "OK:feed fetch succeeded (2 items)")
+        database.setState("page-watch:home:status", "WARNING:HTTP 500")
+
+        val runner = AutomationRunner(config, database, SystemMetricsCollector(config), Notifier(config.alerts))
+        val summary = runner.summary()
+
+        assertEquals(AutomationTargetStatus.OK, summary.rssFeeds.single().status)
+        assertEquals("feed fetch succeeded (2 items)", summary.rssFeeds.single().message)
+        assertNotNull(summary.rssFeeds.single().checkedAt)
+        assertEquals(AutomationTargetStatus.WARNING, summary.pageWatches.single().status)
+        assertEquals("HTTP 500", summary.pageWatches.single().message)
+        assertNotNull(summary.pageWatches.single().checkedAt)
+    }
+
+    @Test
     fun `inventory collector parses cron jobs and failed units`() = runBlocking {
         val etc = tempDir!!.resolve("etc")
         Files.createDirectories(etc.resolve("cron.d"))

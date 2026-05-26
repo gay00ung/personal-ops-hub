@@ -150,10 +150,26 @@ data class DashboardSummary(
 @Serializable
 data class AutomationSummary(
     val dailyReportTime: String,
-    val rssFeeds: List<NamedUrlDto>,
-    val pageWatches: List<NamedUrlDto>,
+    val rssFeeds: List<AutomationTargetSummary>,
+    val pageWatches: List<AutomationTargetSummary>,
     val deployConfigured: Boolean,
     val alertTargetsConfigured: List<String>,
+)
+
+@Serializable
+enum class AutomationTargetStatus {
+    UNKNOWN,
+    OK,
+    WARNING,
+}
+
+@Serializable
+data class AutomationTargetSummary(
+    val name: String,
+    val url: String,
+    val status: AutomationTargetStatus,
+    val checkedAt: Long? = null,
+    val message: String? = null,
 )
 
 @Serializable
@@ -192,12 +208,6 @@ data class InventoryProblem(
     val source: String,
     val message: String,
     val detail: String? = null,
-)
-
-@Serializable
-data class NamedUrlDto(
-    val name: String,
-    val url: String,
 )
 
 @Serializable
