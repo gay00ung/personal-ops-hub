@@ -48,6 +48,7 @@ enum class ManagementAction {
 @Serializable
 enum class LogTargetType {
     SYSTEMD_UNIT,
+    DOCKER_CONTAINER,
 }
 
 @Serializable

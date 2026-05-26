@@ -356,6 +356,40 @@ class ServerTest {
     }
 
     @Test
+    fun `log service reads only allowed docker logs`() = runBlocking {
+        val commands = mutableListOf<List<String>>()
+        val service = LogService(
+            config = ManagementConfig(
+                enabled = false,
+                allowedSystemdUnits = emptyList(),
+                restartOnlySystemdUnits = emptySet(),
+                allowedDockerContainers = listOf("web"),
+            ),
+        ) { command, _ ->
+            commands += command
+            CommandOutput(true, 0, "2026-05-26T09:00:00Z web started")
+        }
+
+        val response = service.dockerLogs("web", 1_000)
+
+        assertTrue(response.success)
+        assertEquals(LogTargetType.DOCKER_CONTAINER, response.targetType)
+        assertEquals(500, response.lines)
+        assertEquals("web", response.name)
+        assertEquals(
+            listOf("docker", "logs", "--tail", "500", "--timestamps", "web"),
+            commands.single(),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            runBlocking { service.dockerLogs("postgres", 100) }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            runBlocking { service.dockerLogs("../web", 100) }
+        }
+        Unit
+    }
+
+    @Test
     fun `log service decorates allowed systemd inventory rows`() {
         val service = LogService(
             config = ManagementConfig(
@@ -383,6 +417,33 @@ class ServerTest {
     }
 
     @Test
+    fun `log service decorates allowed docker inventory rows`() {
+        val service = LogService(
+            config = ManagementConfig(
+                enabled = false,
+                allowedSystemdUnits = emptyList(),
+                restartOnlySystemdUnits = emptySet(),
+                allowedDockerContainers = listOf("*"),
+            ),
+        )
+        val section = InventorySection(
+            key = "DOCKER_CONTAINERS",
+            title = "Docker containers",
+            source = "docker ps --all",
+            available = true,
+            items = listOf(
+                InventoryItem(kind = "docker", name = "web"),
+                InventoryItem(kind = "docker", name = "../bad"),
+            ),
+        )
+
+        val decorated = service.decorateSection(section)
+
+        assertEquals(listOf(LogTargetType.DOCKER_CONTAINER), decorated.items.single { it.name == "web" }.logs)
+        assertEquals(emptyList(), decorated.items.single { it.name == "../bad" }.logs)
+    }
+
+    @Test
     fun `systemd logs endpoint rejects disallowed unit`() = testApplication {
         configure()
 
@@ -390,6 +451,16 @@ class ServerTest {
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertContains(response.bodyAsText(), "systemd unit is not allowed")
+    }
+
+    @Test
+    fun `docker logs endpoint rejects disallowed container`() = testApplication {
+        configure()
+
+        val response = client.get("/api/logs/docker?container=postgres")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertContains(response.bodyAsText(), "docker container is not allowed")
     }
 
     @Test

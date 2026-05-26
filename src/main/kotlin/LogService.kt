@@ -37,13 +37,65 @@ class LogService(
         )
     }
 
+    suspend fun dockerLogs(container: String, lines: Int): LogReadResponse {
+        val normalized = normalizeDockerContainerName(container)
+        require(isDockerContainerAllowed(normalized)) { "docker container is not allowed: $normalized" }
+
+        val safeLines = lines.coerceIn(1, 500)
+        val result = commandRunner(
+            listOf(
+                "docker",
+                "logs",
+                "--tail",
+                safeLines.toString(),
+                "--timestamps",
+                normalized,
+            ),
+            10,
+        )
+        return LogReadResponse(
+            targetType = LogTargetType.DOCKER_CONTAINER,
+            name = normalized,
+            lines = safeLines,
+            success = result.success,
+            exitCode = result.exitCode,
+            output = result.output,
+            timestamp = System.currentTimeMillis(),
+        )
+    }
+
     private fun decorateItem(item: InventoryItem): InventoryItem {
-        if (!item.kind.isSystemdKind()) return item
-        val normalized = normalizeSystemdUnitName(item.name)
-        if (normalized !in config.allowedSystemdUnits) return item
-        return item.copy(logs = listOf(LogTargetType.SYSTEMD_UNIT))
+        val logTarget = when {
+            item.kind.isSystemdKind() -> {
+                val normalized = normalizeSystemdUnitName(item.name)
+                LogTargetType.SYSTEMD_UNIT.takeIf { normalized in config.allowedSystemdUnits }
+            }
+            item.kind.isDockerKind() -> {
+                val normalized = runCatching { normalizeDockerContainerName(item.name) }.getOrNull()
+                LogTargetType.DOCKER_CONTAINER.takeIf { normalized != null && isDockerContainerAllowed(normalized) }
+            }
+            else -> null
+        }
+        return if (logTarget == null || logTarget in item.logs) item else item.copy(logs = item.logs + logTarget)
     }
 
     private fun String.isSystemdKind(): Boolean =
         this == "managed-systemd-unit" || this == "systemd-service" || this == "systemd-timer"
+
+    private fun String.isDockerKind(): Boolean =
+        this == "managed-docker-container" || this == "docker"
+
+    private fun normalizeDockerContainerName(value: String): String {
+        val trimmed = value.trim()
+        require(trimmed.isNotBlank()) { "docker container name is required" }
+        require(dockerNameRegex.matches(trimmed)) { "invalid docker container name" }
+        return trimmed
+    }
+
+    private fun isDockerContainerAllowed(name: String): Boolean =
+        config.allowAllDockerContainers || name in config.allowedDockerContainers
+
+    private companion object {
+        private val dockerNameRegex = Regex("""[A-Za-z0-9][A-Za-z0-9_.-]*""")
+    }
 }

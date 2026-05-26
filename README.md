@@ -9,6 +9,7 @@ A personal server monitoring and automation hub built with Ktor.
 - Checks HTTP endpoints, TCP ports, Docker containers, and backup markers.
 - Shows a read-only server inventory for cron, systemd timers, services, Docker, and listening ports.
 - Shows recent `journalctl` output for explicitly allowed systemd units.
+- Shows recent `docker logs` output for explicitly allowed Docker containers.
 - Can start, stop, or restart explicitly allowed systemd units and Docker containers from the dashboard.
 - Records incident, recovery, deploy, backup, RSS, page-watch, and report events.
 - Streams live metrics over WebSocket at `/ws/metrics`.
@@ -64,6 +65,8 @@ Only targets listed in `OPS_ALLOWED_SYSTEMD_UNITS` or `OPS_ALLOWED_DOCKER_CONTAI
 Each management action records an event with command output plus audit fields: actor, redacted remote address, and user-agent. Remote addresses are partially masked before storage.
 
 Systemd log viewing is read-only and uses the same `OPS_ALLOWED_SYSTEMD_UNITS` allowlist. The dashboard calls `journalctl -u <unit> -n <lines> --no-pager --output=short-iso` with a fixed command array and never accepts arbitrary commands.
+
+Docker log viewing is read-only and uses the same `OPS_ALLOWED_DOCKER_CONTAINERS` allowlist. The dashboard calls `docker logs --tail <lines> --timestamps <container>` with a fixed command array and never accepts arbitrary commands.
 
 ## Docker run
 
@@ -123,6 +126,7 @@ Alerts are sent for action-required events such as service failures, resource th
 - `POST /api/services/run`
 - `GET /api/inventory`
 - `GET /api/logs/systemd?unit=<unit>&lines=100`
+- `GET /api/logs/docker?container=<container>&lines=100`
 - `POST /api/manage/actions`
 - `GET /api/events`
 - `GET /api/automation`

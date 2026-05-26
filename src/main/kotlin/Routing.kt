@@ -123,6 +123,19 @@ fun Application.configureRouting() {
                     call.respond(response)
                 }
 
+                get("/logs/docker") {
+                    val container = call.request.queryParameters["container"].orEmpty()
+                    val lines = call.request.queryParameters["lines"]?.toIntOrNull() ?: 100
+                    val response = runCatching { hub.dockerLogs(container, lines) }
+                        .getOrElse { error ->
+                            return@get call.respond(
+                                HttpStatusCode.BadRequest,
+                                ErrorResponse("bad_request", error.message ?: "invalid log request"),
+                            )
+                        }
+                    call.respond(response)
+                }
+
                 post("/manage/actions") {
                     if (!call.requireAdminToken(hub)) return@post
                     val request = call.receive<ManagementActionRequest>()

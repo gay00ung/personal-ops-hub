@@ -144,6 +144,9 @@ class OpsHub(val config: AppConfig) {
     suspend fun systemdLogs(unit: String, lines: Int): LogReadResponse =
         logService.systemdLogs(unit, lines)
 
+    suspend fun dockerLogs(container: String, lines: Int): LogReadResponse =
+        logService.dockerLogs(container, lines)
+
     private suspend fun evaluateServiceTransition(result: ServiceCheckResult) {
         val key = "service:${result.kind}:${result.name}"
         val previous = lastHealthStates.put(key, result.status)

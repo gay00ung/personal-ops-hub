@@ -86,7 +86,7 @@ const translations = {
         confirmStop: "Stop {name}?",
         viewLogs: "Logs",
         logsTitle: "Logs",
-        logsEmpty: "Select a log-enabled systemd unit.",
+        logsEmpty: "Select a log-enabled systemd unit or Docker container.",
         logsLoading: "Loading logs for {name}...",
         logsUpdated: "Updated {time} · last {lines} lines",
         logsFailed: "Failed to load logs · exit {exitCode}",
@@ -218,7 +218,7 @@ const translations = {
         confirmStop: "{name}을(를) 중지할까요?",
         viewLogs: "로그",
         logsTitle: "로그",
-        logsEmpty: "로그를 볼 수 있는 systemd 유닛을 선택하세요.",
+        logsEmpty: "로그를 볼 수 있는 systemd 유닛이나 Docker 컨테이너를 선택하세요.",
         logsLoading: "{name} 로그 불러오는 중...",
         logsUpdated: "{time} 갱신 · 최근 {lines}줄",
         logsFailed: "로그 불러오기 실패 · 종료 코드 {exitCode}",
@@ -1105,6 +1105,10 @@ function logUrl(targetType, name, lines) {
     if (targetType === "SYSTEMD_UNIT") {
         const params = new URLSearchParams({ unit: name, lines: String(lines) });
         return `/api/logs/systemd?${params.toString()}`;
+    }
+    if (targetType === "DOCKER_CONTAINER") {
+        const params = new URLSearchParams({ container: name, lines: String(lines) });
+        return `/api/logs/docker?${params.toString()}`;
     }
     return null;
 }
