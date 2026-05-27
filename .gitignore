@@ -18,6 +18,9 @@ data/
 output/
 .playwright-cli/
 
+# Codex harness runtime notes
+.codex/harnesses/*/runs/
+
 # Logs
 *.log
 
